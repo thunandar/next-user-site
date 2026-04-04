@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { wishlistApi } from '@/lib/api'
 import { useAuth } from './AuthContext'
 
@@ -17,7 +17,7 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
   const [ids, setIds] = useState<Set<number>>(new Set())
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     if (!user) { setIds(new Set()); return }
     try {
       const res = await wishlistApi.getAll()
@@ -25,9 +25,9 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
     } catch {
       setIds(new Set())
     }
-  }
+  }, [user])
 
-  useEffect(() => { refresh() }, [user?.id])
+  useEffect(() => { refresh() }, [refresh])
 
   const toggle = async (productId: number) => {
     if (ids.has(productId)) {

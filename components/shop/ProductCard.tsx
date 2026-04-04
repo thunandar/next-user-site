@@ -38,51 +38,83 @@ export default function ProductCard({ product, avgRating }: Props) {
   }
 
   return (
-    <Link href={`/shop/products/${product.id}`} className="group bg-white rounded-2xl shadow-sm border border-gray-100 hover:shadow-md transition-all overflow-hidden flex flex-col">
+    <Link
+      href={`/shop/products/${product.id}`}
+      className="group bg-white rounded-2xl overflow-hidden flex flex-col shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-gray-200 hover:-translate-y-0.5"
+    >
+      {/* Image */}
       <div className="relative aspect-square bg-gray-50 overflow-hidden">
         <Image
           src={primaryImage}
           alt={product.name}
           fill
-          className="object-cover group-hover:scale-105 transition-transform duration-300"
-          sizes="(max-width: 768px) 50vw, 25vw"
+          className={`object-cover transition-transform duration-500 group-hover:scale-105 ${stockStatus === 'out' ? 'opacity-50 grayscale' : ''}`}
+          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
         />
+
+        {/* Out of stock */}
+        {stockStatus === 'out' && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="bg-gray-900/80 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-full tracking-wide">
+              Out of Stock
+            </span>
+          </div>
+        )}
+
+        {/* Low stock */}
+        {stockStatus === 'low' && (
+          <div className="absolute top-2.5 left-2.5">
+            <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
+              Only {product.stock} left
+            </span>
+          </div>
+        )}
+
+        {/* Wishlist */}
         <button
           onClick={handleWishlist}
-          className={`absolute top-3 right-3 p-2 rounded-full shadow transition-colors ${
-            inWishlist ? 'bg-red-50 text-red-500' : 'bg-white text-gray-400 hover:text-red-400'
+          className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-md border transition-all duration-200 ${
+            inWishlist
+              ? 'bg-rose-500 border-rose-500 text-white scale-110'
+              : 'bg-white/90 border-white text-gray-400 hover:text-rose-500 hover:scale-110'
           }`}
         >
-          <Heart size={16} fill={inWishlist ? 'currentColor' : 'none'} />
+          <Heart size={14} fill={inWishlist ? 'currentColor' : 'none'} />
         </button>
-        {stockStatus === 'out' && (
-          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-            <span className="bg-white text-gray-700 text-xs font-semibold px-3 py-1 rounded-full">Out of Stock</span>
-          </div>
-        )}
       </div>
 
+      {/* Info */}
       <div className="p-4 flex flex-col gap-2 flex-1">
         {product.category && (
-          <span className="text-xs text-blue-600 font-medium uppercase tracking-wide">{product.category}</span>
+          <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">
+            {product.category}
+          </span>
         )}
-        <h3 className="font-semibold text-gray-900 text-sm leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+
+        <h3 className="text-sm font-semibold text-gray-800 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
           {product.name}
         </h3>
-        {avgRating != null && (
+
+        {avgRating != null && avgRating > 0 && (
           <div className="flex items-center gap-1">
-            <Star size={12} className="text-yellow-400 fill-yellow-400" />
-            <span className="text-xs text-gray-500">{avgRating.toFixed(1)}</span>
+            <Star size={11} className="text-amber-400 fill-amber-400" />
+            <span className="text-xs text-gray-500 font-medium">{avgRating.toFixed(1)}</span>
           </div>
         )}
-        <div className="flex items-center justify-between mt-auto pt-2">
-          <span className="text-lg font-bold text-gray-900">{formatCurrency(product.price)}</span>
+
+        <div className="flex items-center justify-between mt-auto pt-1">
+          <span className="text-base font-bold text-gray-900">{formatCurrency(product.price)}</span>
           <button
             onClick={handleAddToCart}
             disabled={stockStatus === 'out'}
-            className="p-2 rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-200 disabled:text-gray-400 transition-colors"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-150 ${
+              stockStatus === 'out'
+                ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95'
+            }`}
           >
-            <ShoppingCart size={16} />
+            <ShoppingCart size={13} />
+            <span className="hidden sm:inline">Add</span>
           </button>
         </div>
       </div>

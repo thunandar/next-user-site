@@ -4,24 +4,32 @@ import { useEffect, useState } from 'react'
 import { Heart } from 'lucide-react'
 import Link from 'next/link'
 import { wishlistApi } from '@/lib/api'
+import { useWishlist } from '@/context/WishlistContext'
 import ProductCard from '@/components/shop/ProductCard'
 import { PageLoader } from '@/components/ui/Spinner'
 import type { Product } from '@/types'
 
 export default function WishlistPage() {
+  const { ids, refresh: syncContext } = useWishlist()
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     wishlistApi.getAll()
-      .then(res => setProducts(res.data.map((item: { product: Product }) => item.product).filter(Boolean)))
+      .then(res => {
+        setProducts(res.data.map((item: { product: Product }) => item.product).filter(Boolean))
+        syncContext() // keep context in sync with what we just fetched
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
+  // Filter out products that have been removed via the wishlist context (e.g. via ProductCard toggle)
+  const displayedProducts = products.filter(p => ids.has(p.id))
+
   if (loading) return <PageLoader />
 
-  if (products.length === 0) {
+  if (displayedProducts.length === 0) {
     return (
       <div className="text-center py-24 space-y-4">
         <Heart size={48} className="mx-auto text-gray-300" />
@@ -33,9 +41,9 @@ export default function WishlistPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">My Wishlist ({products.length})</h1>
+      <h1 className="text-2xl font-bold text-gray-900">My Wishlist ({displayedProducts.length})</h1>
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {products.map(p => <ProductCard key={p.id} product={p} />)}
+        {displayedProducts.map(p => <ProductCard key={p.id} product={p} />)}
       </div>
     </div>
   )

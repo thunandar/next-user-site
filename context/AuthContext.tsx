@@ -34,14 +34,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const { user, tokens } = await authApi.login(email, password)
-    tokenStore.set(tokens.accessToken, tokens.refreshToken)
+    tokenStore.set(tokens.accessToken)
     setUser(user)
     window.location.href = '/shop'
   }
 
   const register = async (data: RegisterData) => {
     const { user, tokens } = await authApi.register(data)
-    tokenStore.set(tokens.accessToken, tokens.refreshToken)
+    tokenStore.set(tokens.accessToken)
     setUser(user)
     window.location.href = '/shop'
   }
