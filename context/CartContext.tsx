@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
+import toast from 'react-hot-toast'
 import type { CartItem, Product } from '@/types'
 
 interface CartContextValue {
@@ -23,8 +24,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const stored = localStorage.getItem(CART_KEY)
-      if (stored) setItems(JSON.parse(stored))
-    } catch {}
+      if (stored) setItems(JSON.parse(stored) as CartItem[])
+    } catch {
+      localStorage.removeItem(CART_KEY)
+      toast.error('Your cart data was corrupted and has been cleared.')
+    }
   }, [])
 
   const save = (next: CartItem[]) => {

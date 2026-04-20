@@ -1,12 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ShoppingBag } from 'lucide-react'
+import { ShoppingBag, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 import toast from 'react-hot-toast'
 import { ordersApi } from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import Badge from '@/components/ui/Badge'
+import { PageLoader } from '@/components/ui/Spinner'
 import type { Order } from '@/types'
 
 const STATUS_VARIANT: Record<Order['status'], 'green' | 'blue' | 'yellow' | 'purple' | 'red'> = {
@@ -16,11 +17,16 @@ const STATUS_VARIANT: Record<Order['status'], 'green' | 'blue' | 'yellow' | 'pur
 export default function MyOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState(false)
 
   const load = () => {
+    setFetchError(false)
     ordersApi.getMy()
       .then(res => setOrders(res.orders))
-      .catch(() => {})
+      .catch(() => {
+        toast.error('Failed to load orders')
+        setFetchError(true)
+      })
       .finally(() => setLoading(false))
   }
 
@@ -36,7 +42,15 @@ export default function MyOrdersPage() {
     }
   }
 
-  if (loading) return <div className="text-center py-20 text-gray-400">Loading orders...</div>
+  if (loading) return <PageLoader />
+
+  if (fetchError) return (
+    <div className="text-center py-24 space-y-3 text-gray-400">
+      <AlertCircle size={48} className="mx-auto opacity-40" />
+      <p className="text-lg font-medium">Failed to load orders</p>
+      <p className="text-sm">Check your connection and try refreshing.</p>
+    </div>
+  )
 
   if (orders.length === 0) {
     return (
@@ -63,7 +77,9 @@ export default function MyOrdersPage() {
                 {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
               </Badge>
               {order.status === 'pending' && (
-                <button onClick={() => cancel(order.id)}
+                <button
+                  onClick={() => cancel(order.id)}
+                  aria-label={`Cancel order #${order.id}`}
                   className="text-xs text-red-500 hover:text-red-700 border border-red-200 px-2 py-0.5 rounded-lg transition-colors">
                   Cancel
                 </button>

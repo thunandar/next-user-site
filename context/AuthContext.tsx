@@ -1,6 +1,8 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import axios from 'axios'
 import { authApi, tokenStore } from '@/lib/api'
 import type { User, RegisterData } from '@/types'
 
@@ -17,16 +19,16 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const router = useRouter()
 
+  // Silent refresh on every page load — restores session from HttpOnly refresh_token cookie
   useEffect(() => {
-    const token = tokenStore.getAccess()
-    if (!token) {
-      tokenStore.clear() // remove any stale cookie so proxy doesn't block /login
-      setIsLoading(false)
-      return
-    }
-    authApi
-      .getMe()
+    axios.post('/api/auth/refresh')
+      .then(res => {
+        const { accessToken } = res.data.data as { accessToken: string }
+        tokenStore.set(accessToken)
+        return authApi.getMe()
+      })
       .then(({ user }) => setUser(user))
       .catch(() => tokenStore.clear())
       .finally(() => setIsLoading(false))
@@ -36,26 +38,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { user, tokens } = await authApi.login(email, password)
     tokenStore.set(tokens.accessToken)
     setUser(user)
-    window.location.href = '/shop'
+    router.push('/shop')
   }
 
   const register = async (data: RegisterData) => {
     const { user, tokens } = await authApi.register(data)
     tokenStore.set(tokens.accessToken)
     setUser(user)
-    window.location.href = '/shop'
+    router.push('/shop')
   }
 
   const logout = async () => {
     try {
       await authApi.logout()
     } catch {
-      // ignore
-    } finally {
-      tokenStore.clear()
-      setUser(null)
-      window.location.href = '/shop'
+      // ignore logout errors
     }
+    tokenStore.clear()
+    setUser(null)
+    window.location.href = '/shop'
   }
 
   return (

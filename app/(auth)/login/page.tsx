@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Eye, EyeOff } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
+import { getApiErrorMessage } from '@/lib/api'
 import Button from '@/components/ui/Button'
 
 export default function LoginPage() {
@@ -17,7 +18,6 @@ export default function LoginPage() {
   const validate = () => {
     const e: Record<string, string> = {}
     if (!form.email) e.email = 'Email is required'
-    else if (!/\S+@\S+\.\S+/.test(form.email)) e.email = 'Invalid email address'
     if (!form.password) e.password = 'Password is required'
     return e
   }
@@ -32,8 +32,7 @@ export default function LoginPage() {
       await login(form.email, form.password)
       toast.success('Welcome back!')
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Invalid credentials'
-      toast.error(msg)
+      toast.error(getApiErrorMessage(err, 'Invalid credentials'))
     } finally {
       setLoading(false)
     }
@@ -48,22 +47,26 @@ export default function LoginPage() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-1">
-          <label className="text-sm font-medium text-gray-700">Email</label>
+          <label htmlFor="email" className="text-sm font-medium text-gray-700">Email</label>
           <input
+            id="email"
             type="email"
+            autoComplete="email"
             placeholder="you@example.com"
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
             className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-xl text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-gray-50"
           />
-          {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
+          {errors.email && <p className="text-xs text-red-500" role="alert">{errors.email}</p>}
         </div>
 
         <div className="space-y-1">
-          <label className="text-sm font-medium text-gray-700">Password</label>
+          <label htmlFor="password" className="text-sm font-medium text-gray-700">Password</label>
           <div className="relative">
             <input
+              id="password"
               type={showPass ? 'text' : 'password'}
+              autoComplete="current-password"
               placeholder="••••••••"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -71,13 +74,15 @@ export default function LoginPage() {
             />
             <button
               type="button"
+              aria-label={showPass ? 'Hide password' : 'Show password'}
+              aria-pressed={showPass}
               onClick={() => setShowPass(!showPass)}
               className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
             >
               {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
-          {errors.password && <p className="text-xs text-red-500">{errors.password}</p>}
+          {errors.password && <p className="text-xs text-red-500" role="alert">{errors.password}</p>}
         </div>
 
         <Button type="submit" loading={loading} className="w-full mt-2" size="lg">

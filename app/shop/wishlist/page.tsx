@@ -1,8 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Heart } from 'lucide-react'
+import { Heart, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
+import toast from 'react-hot-toast'
 import { wishlistApi } from '@/lib/api'
 import { useWishlist } from '@/context/WishlistContext'
 import ProductCard from '@/components/shop/ProductCard'
@@ -13,21 +14,32 @@ export default function WishlistPage() {
   const { ids, refresh: syncContext } = useWishlist()
   const [products, setProducts] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState(false)
 
   useEffect(() => {
     wishlistApi.getAll()
       .then(res => {
         setProducts(res.data.map((item: { product: Product }) => item.product).filter(Boolean))
-        syncContext() // keep context in sync with what we just fetched
+        syncContext()
       })
-      .catch(() => {})
+      .catch(() => {
+        toast.error('Failed to load wishlist')
+        setFetchError(true)
+      })
       .finally(() => setLoading(false))
   }, [])
 
-  // Filter out products that have been removed via the wishlist context (e.g. via ProductCard toggle)
   const displayedProducts = products.filter(p => ids.has(p.id))
 
   if (loading) return <PageLoader />
+
+  if (fetchError) return (
+    <div className="text-center py-24 space-y-3 text-gray-400">
+      <AlertCircle size={48} className="mx-auto opacity-40" />
+      <p className="text-lg font-medium">Failed to load wishlist</p>
+      <p className="text-sm">Check your connection and try refreshing.</p>
+    </div>
+  )
 
   if (displayedProducts.length === 0) {
     return (

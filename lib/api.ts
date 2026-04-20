@@ -11,20 +11,49 @@ import type {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
 
+const buildParams = (obj: Record<string, unknown>): URLSearchParams => {
+  const params = new URLSearchParams()
+  Object.entries(obj).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') params.set(k, String(v))
+  })
+  return params
+}
+
+const buildPaginatedResponse = <T>(
+  data: T[],
+  currentPage: number,
+  totalPages: number,
+  totalItems: number,
+  itemsPerPage: number
+): PaginatedResponse<T> => ({
+  message: '',
+  data,
+  pagination: {
+    currentPage,
+    totalPages,
+    totalItems,
+    itemsPerPage,
+    hasNextPage: currentPage < totalPages,
+    hasPrevPage: currentPage > 1,
+  },
+})
+
 // ─── Token Management ────────────────────────────────────────────────────────
-// access_token: stored in localStorage + non-HttpOnly cookie (proxy reads it)
-// refresh_token: stored in HttpOnly cookie only (JS cannot access it)
+// access_token: in-memory only + non-HttpOnly cookie (middleware reads it)
+// refresh_token: HttpOnly cookie only (set by /api/auth/* routes, JS cannot read it)
+
+let _accessToken: string | null = null
 
 export const tokenStore = {
-  getAccess: () => (typeof window !== 'undefined' ? localStorage.getItem('access_token') : null),
+  getAccess: () => _accessToken,
   set: (access: string) => {
+    _accessToken = access
     if (typeof window === 'undefined') return
-    localStorage.setItem('access_token', access)
     document.cookie = `access_token=${access}; path=/; max-age=${30 * 24 * 60 * 60}; SameSite=Lax`
   },
   clear: () => {
+    _accessToken = null
     if (typeof window === 'undefined') return
-    localStorage.removeItem('access_token')
     document.cookie = 'access_token=; path=/; max-age=0'
   },
 }
@@ -67,7 +96,6 @@ api.interceptors.response.use(
     isRefreshing = true
 
     try {
-      // Call the Next.js API route — it reads the HttpOnly refresh_token cookie
       const res = await axios.post('/api/auth/refresh')
       const { accessToken } = res.data.data
       tokenStore.set(accessToken)
@@ -87,27 +115,25 @@ api.interceptors.response.use(
 )
 
 // ─── Auth API ─────────────────────────────────────────────────────────────────
-// login/register go through Next.js API routes (set HttpOnly cookies)
-// getMe goes directly to backend (uses access token in Authorization header)
 
 export const authApi = {
   register: async (data: RegisterData): Promise<AuthResponse> => {
     const res = await axios.post('/api/auth/register', data)
-    const { user, accessToken } = res.data.data
-    return { message: res.data.message, user, tokens: { accessToken } }
+    const { user, accessToken } = res.data.data as { user: User; accessToken: string }
+    return { message: res.data.message, user, tokens: { accessToken, refreshToken: '' } }
   },
   login: async (email: string, password: string): Promise<AuthResponse> => {
     const res = await axios.post('/api/auth/login', { email, password })
-    const { user, accessToken } = res.data.data
-    return { message: res.data.message, user, tokens: { accessToken } }
+    const { user, accessToken } = res.data.data as { user: User; accessToken: string }
+    return { message: res.data.message, user, tokens: { accessToken, refreshToken: '' } }
   },
   logout: async (): Promise<void> => {
     try { await api.post('/auth/logout') } catch { /* ignore if access token already expired */ }
-    await axios.post('/api/auth/logout') // clears HttpOnly refresh_token cookie
+    await axios.post('/api/auth/logout')
   },
   getMe: async (): Promise<{ user: User }> => {
     const res = await api.get('/auth/me')
-    return { user: res.data.data }
+    return { user: res.data.data as User }
   },
 }
 
@@ -115,46 +141,20 @@ export const authApi = {
 
 export const productsApi = {
   getAll: async (filters: ProductFilters = {}): Promise<PaginatedResponse<Product>> => {
-    const params = new URLSearchParams()
-    Object.entries(filters).forEach(([k, v]) => {
-      if (v !== undefined && v !== null && v !== '') params.set(k, String(v))
-    })
-    const res = await api.get(`/products?${params}`)
+    const res = await api.get(`/products?${buildParams(filters as Record<string, unknown>)}`)
     const { products, currentPage, totalPages, totalProducts } = res.data.data
-    return {
-      message: '',
-      data: products,
-      pagination: {
-        currentPage,
-        totalPages,
-        totalItems: totalProducts,
-        itemsPerPage: Number(filters.limit) || 10,
-        hasNextPage: currentPage < totalPages,
-        hasPrevPage: currentPage > 1,
-      },
-    }
+    return buildPaginatedResponse(products, currentPage, totalPages, totalProducts, Number(filters.limit) || 10)
   },
 
   getById: async (id: number): Promise<SingleResponse<Product>> => {
     const res = await api.get(`/products/${id}`)
-    return { message: '', data: res.data.data }
+    return { message: '', data: res.data.data as Product }
   },
 
   search: async (term: string, page = 1, limit = 10): Promise<PaginatedResponse<Product>> => {
-    const res = await api.get(`/products/search?search=${encodeURIComponent(term)}&page=${page}&limit=${limit}`)
+    const res = await api.get(`/products/search?${buildParams({ search: term, page, limit })}`)
     const { products, currentPage, totalPages, totalProducts } = res.data.data
-    return {
-      message: '',
-      data: products,
-      pagination: {
-        currentPage,
-        totalPages,
-        totalItems: totalProducts,
-        itemsPerPage: limit,
-        hasNextPage: currentPage < totalPages,
-        hasPrevPage: currentPage > 1,
-      },
-    }
+    return buildPaginatedResponse(products, currentPage, totalPages, totalProducts, limit)
   },
 }
 
@@ -163,22 +163,22 @@ export const productsApi = {
 export const categoriesApi = {
   getAll: async (): Promise<{ categories: string[] }> => {
     const res = await api.get('/categories')
-    return { categories: res.data.data }
+    return { categories: res.data.data as string[] }
   },
 }
 
 // ─── Orders API ───────────────────────────────────────────────────────────────
 
 export const ordersApi = {
-  create: async (data: import('@/types').CreateOrderData) => {
+  create: async (data: import('@/types').CreateOrderData): Promise<import('@/types').Order> => {
     const res = await api.post('/orders', data)
     return res.data.data as import('@/types').Order
   },
-  getMy: async (page = 1, limit = 20) => {
+  getMy: async (page = 1, limit = 20): Promise<{ orders: import('@/types').Order[]; totalPages: number; currentPage: number; totalOrders: number }> => {
     const res = await api.get(`/orders/my?page=${page}&limit=${limit}`)
     return res.data.data as { orders: import('@/types').Order[]; totalPages: number; currentPage: number; totalOrders: number }
   },
-  updateStatus: async (id: number, status: string) => {
+  updateStatus: async (id: number, status: string): Promise<import('@/types').Order> => {
     const res = await api.patch(`/orders/${id}/status`, { status })
     return res.data.data as import('@/types').Order
   },
@@ -187,11 +187,11 @@ export const ordersApi = {
 // ─── Reviews API ──────────────────────────────────────────────────────────────
 
 export const reviewsApi = {
-  getAll: async (productId: number) => {
+  getAll: async (productId: number): Promise<{ reviews: import('@/types').Review[]; avgRating: number | null; totalReviews: number }> => {
     const res = await api.get(`/products/${productId}/reviews`)
     return res.data.data as { reviews: import('@/types').Review[]; avgRating: number | null; totalReviews: number }
   },
-  create: async (productId: number, data: { rating: number; comment?: string }) => {
+  create: async (productId: number, data: { rating: number; comment?: string }): Promise<import('@/types').Review> => {
     const res = await api.post(`/products/${productId}/reviews`, data)
     return res.data.data as import('@/types').Review
   },
@@ -200,27 +200,22 @@ export const reviewsApi = {
 // ─── Wishlist API ─────────────────────────────────────────────────────────────
 
 export const wishlistApi = {
-  getAll: async () => {
+  getAll: async (): Promise<{ data: import('@/types').WishlistItem[] }> => {
     const res = await api.get('/wishlist')
     return { data: res.data.data as import('@/types').WishlistItem[] }
   },
-  add: async (productId: number) => { await api.post(`/wishlist/${productId}`) },
-  remove: async (productId: number) => { await api.delete(`/wishlist/${productId}`) },
-}
-
-// ─── Payments API ─────────────────────────────────────────────────────────────
-
-export const paymentsApi = {
-  createIntent: async (amount: number, currency = 'usd'): Promise<{ clientSecret: string; paymentIntentId: string }> => {
-    const res = await api.post('/payments/create-intent', { amount, currency })
-    return res.data
-  },
+  add: async (productId: number): Promise<void> => { await api.post(`/wishlist/${productId}`) },
+  remove: async (productId: number): Promise<void> => { await api.delete(`/wishlist/${productId}`) },
 }
 
 // ─── Analytics ────────────────────────────────────────────────────────────────
 
 export const trackProductView = (productId: number) => {
   api.post(`/products/${productId}/view`).catch(() => {})
+}
+
+export function getApiErrorMessage(err: unknown, fallback = 'An error occurred'): string {
+  return (err as { response?: { data?: { message?: string } } })?.response?.data?.message || fallback
 }
 
 export default api

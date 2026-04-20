@@ -24,13 +24,16 @@ function UserDropdown({ user, logout }: { user: { name: string; email: string };
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen(o => !o)}
+        aria-label="User menu"
+        aria-expanded={open}
+        aria-haspopup="true"
         className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 hover:border-gray-300 hover:bg-gray-50 transition-all text-sm font-medium text-gray-700"
       >
         <div className="w-6 h-6 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold">
           {user.name.charAt(0).toUpperCase()}
         </div>
         <span className="hidden sm:block max-w-25 truncate">{user.name.split(' ')[0]}</span>
-        <ChevronDown size={14} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={14} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true" />
       </button>
 
       {open && (
@@ -44,7 +47,7 @@ function UserDropdown({ user, logout }: { user: { name: string; email: string };
               onClick={() => { setOpen(false); logout() }}
               className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
             >
-              <LogOut size={16} /> Sign out
+              <LogOut size={16} aria-hidden="true" /> Sign out
             </button>
           </div>
         </div>
@@ -61,8 +64,8 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
   const [menuOpen, setMenuOpen] = useState(false)
 
   const baseLinks = [
-    { href: '/shop', label: 'Home' },
-    { href: '/shop/products', label: 'Products' },
+    { href: '/shop', label: 'Home', badge: null as number | null },
+    { href: '/shop/products', label: 'Products', badge: null as number | null },
   ]
 
   const userLinks = user
@@ -83,20 +86,19 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
 
-            {/* Logo */}
             <Link href="/shop" className="flex items-center gap-2 font-bold text-lg text-gray-900 shrink-0">
               <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Package size={16} className="text-white" />
+                <Package size={16} className="text-white" aria-hidden="true" />
               </div>
               <span className="hidden sm:block">ProductHub</span>
             </Link>
 
-            {/* Desktop Nav — left to right */}
-            <nav className="hidden md:flex items-center gap-1">
+            <nav className="hidden md:flex items-center gap-1" aria-label="Main navigation">
               {allNavLinks.map(({ href, label, badge }) => (
                 <Link
                   key={href}
                   href={href}
+                  aria-current={isActive(href) ? 'page' : undefined}
                   className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                     isActive(href)
                       ? 'text-blue-600 bg-blue-50'
@@ -113,18 +115,17 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
               ))}
             </nav>
 
-            {/* Right side actions */}
             <div className="flex items-center gap-2">
               {user ? (
                 <>
                   <Link
                     href="/shop/cart"
+                    aria-label={`Cart${totalItems > 0 ? `, ${totalItems} item${totalItems !== 1 ? 's' : ''}` : ''}`}
                     className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors relative"
-                    title="Cart"
                   >
-                    <ShoppingCart size={20} />
+                    <ShoppingCart size={20} aria-hidden="true" />
                     {totalItems > 0 && (
-                      <span className="absolute -top-0.5 -right-0.5 bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold leading-none">
+                      <span className="absolute -top-0.5 -right-0.5 bg-blue-600 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold leading-none" aria-hidden="true">
                         {totalItems > 9 ? '9+' : totalItems}
                       </span>
                     )}
@@ -149,22 +150,24 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
               )}
 
               <button
+                aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+                aria-expanded={menuOpen}
                 className="md:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
                 onClick={() => setMenuOpen(!menuOpen)}
               >
-                {menuOpen ? <X size={20} /> : <Menu size={20} />}
+                {menuOpen ? <X size={20} aria-hidden="true" /> : <Menu size={20} aria-hidden="true" />}
               </button>
             </div>
           </div>
 
-          {/* Mobile Nav */}
           {menuOpen && (
-            <div className="md:hidden py-3 border-t border-gray-100 space-y-1">
+            <nav aria-label="Mobile navigation" className="md:hidden py-3 border-t border-gray-100 space-y-1">
               {allNavLinks.map(({ href, label }) => (
                 <Link
                   key={href}
                   href={href}
                   onClick={() => setMenuOpen(false)}
+                  aria-current={isActive(href) ? 'page' : undefined}
                   className={`flex items-center justify-between px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     isActive(href) ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-100'
                   }`}
@@ -198,7 +201,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
                   </Link>
                 </div>
               )}
-            </div>
+            </nav>
           )}
         </div>
       </header>
@@ -212,7 +215,7 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2 font-bold text-gray-900">
               <div className="w-7 h-7 bg-blue-600 rounded-lg flex items-center justify-center">
-                <Package size={14} className="text-white" />
+                <Package size={14} className="text-white" aria-hidden="true" />
               </div>
               ProductHub
             </div>

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Eye, EyeOff } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/context/AuthContext'
+import { getApiErrorMessage } from '@/lib/api'
 import Button from '@/components/ui/Button'
 
 export default function RegisterPage() {
@@ -18,7 +19,6 @@ export default function RegisterPage() {
     const e: Record<string, string> = {}
     if (!form.name || form.name.length < 2) e.name = 'Name must be at least 2 characters'
     if (!form.email) e.email = 'Email is required'
-    else if (!/\S+@\S+\.\S+/.test(form.email)) e.email = 'Invalid email address'
     if (!form.password || form.password.length < 6) e.password = 'Password must be at least 6 characters'
     return e
   }
@@ -33,8 +33,7 @@ export default function RegisterPage() {
       await register(form)
       toast.success('Account created!')
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Registration failed'
-      toast.error(msg)
+      toast.error(getApiErrorMessage(err, 'Registration failed'))
     } finally {
       setLoading(false)
     }
@@ -51,34 +50,40 @@ export default function RegisterPage() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-1">
-          <label className="text-sm font-medium text-gray-700">Full Name</label>
+          <label htmlFor="name" className="text-sm font-medium text-gray-700">Full Name</label>
           <input
+            id="name"
             type="text"
+            autoComplete="name"
             placeholder="John Doe"
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value })}
             className={inputClass}
           />
-          {errors.name && <p className="text-xs text-red-500">{errors.name}</p>}
+          {errors.name && <p className="text-xs text-red-500" role="alert">{errors.name}</p>}
         </div>
 
         <div className="space-y-1">
-          <label className="text-sm font-medium text-gray-700">Email</label>
+          <label htmlFor="reg-email" className="text-sm font-medium text-gray-700">Email</label>
           <input
+            id="reg-email"
             type="email"
+            autoComplete="email"
             placeholder="you@example.com"
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
             className={inputClass}
           />
-          {errors.email && <p className="text-xs text-red-500">{errors.email}</p>}
+          {errors.email && <p className="text-xs text-red-500" role="alert">{errors.email}</p>}
         </div>
 
         <div className="space-y-1">
-          <label className="text-sm font-medium text-gray-700">Password</label>
+          <label htmlFor="reg-password" className="text-sm font-medium text-gray-700">Password</label>
           <div className="relative">
             <input
+              id="reg-password"
               type={showPass ? 'text' : 'password'}
+              autoComplete="new-password"
               placeholder="Min 6 characters"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -86,18 +91,21 @@ export default function RegisterPage() {
             />
             <button
               type="button"
+              aria-label={showPass ? 'Hide password' : 'Show password'}
+              aria-pressed={showPass}
               onClick={() => setShowPass(!showPass)}
               className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
             >
               {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           </div>
-          {errors.password && <p className="text-xs text-red-500">{errors.password}</p>}
+          {errors.password && <p className="text-xs text-red-500" role="alert">{errors.password}</p>}
         </div>
 
         <div className="space-y-1">
-          <label className="text-sm font-medium text-gray-700">Account type</label>
+          <label htmlFor="role" className="text-sm font-medium text-gray-700">Account type</label>
           <select
+            id="role"
             value={form.role}
             onChange={(e) => setForm({ ...form, role: e.target.value as 'admin' | 'user' })}
             className={inputClass}

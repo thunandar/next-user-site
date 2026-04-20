@@ -52,7 +52,6 @@ export default function ProductCard({ product, avgRating }: Props) {
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
         />
 
-        {/* Out of stock */}
         {stockStatus === 'out' && (
           <div className="absolute inset-0 flex items-center justify-center">
             <span className="bg-gray-900/80 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-full tracking-wide">
@@ -61,7 +60,6 @@ export default function ProductCard({ product, avgRating }: Props) {
           </div>
         )}
 
-        {/* Low stock */}
         {stockStatus === 'low' && (
           <div className="absolute top-2.5 left-2.5">
             <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
@@ -70,16 +68,16 @@ export default function ProductCard({ product, avgRating }: Props) {
           </div>
         )}
 
-        {/* Wishlist */}
         <button
           onClick={handleWishlist}
+          aria-label={inWishlist ? `Remove ${product.name} from wishlist` : `Add ${product.name} to wishlist`}
           className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-md border transition-all duration-200 ${
             inWishlist
               ? 'bg-rose-500 border-rose-500 text-white scale-110'
               : 'bg-white/90 border-white text-gray-400 hover:text-rose-500 hover:scale-110'
           }`}
         >
-          <Heart size={14} fill={inWishlist ? 'currentColor' : 'none'} />
+          <Heart size={14} fill={inWishlist ? 'currentColor' : 'none'} aria-hidden="true" />
         </button>
       </div>
 
@@ -97,7 +95,7 @@ export default function ProductCard({ product, avgRating }: Props) {
 
         {avgRating != null && avgRating > 0 && (
           <div className="flex items-center gap-1">
-            <Star size={11} className="text-amber-400 fill-amber-400" />
+            <Star size={11} className="text-amber-400 fill-amber-400" aria-hidden="true" />
             <span className="text-xs text-gray-500 font-medium">{avgRating.toFixed(1)}</span>
           </div>
         )}
@@ -107,13 +105,14 @@ export default function ProductCard({ product, avgRating }: Props) {
           <button
             onClick={handleAddToCart}
             disabled={stockStatus === 'out'}
+            aria-label={`Add ${product.name} to cart`}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-150 ${
               stockStatus === 'out'
                 ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
                 : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95'
             }`}
           >
-            <ShoppingCart size={13} />
+            <ShoppingCart size={13} aria-hidden="true" />
             <span className="hidden sm:inline">Add</span>
           </button>
         </div>

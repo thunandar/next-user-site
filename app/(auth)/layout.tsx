@@ -1,5 +1,8 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Package } from 'lucide-react'
+
+export const metadata: Metadata = { title: 'Account' }
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (

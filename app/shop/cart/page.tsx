@@ -12,10 +12,10 @@ export default function CartPage() {
   if (items.length === 0) {
     return (
       <div className="text-center py-24 space-y-4">
-        <ShoppingCart size={48} className="mx-auto text-gray-300" />
+        <ShoppingCart size={48} className="mx-auto text-gray-300" aria-hidden="true" />
         <h2 className="text-xl font-semibold text-gray-700">Your cart is empty</h2>
         <Link href="/shop/products" className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium">
-          Continue Shopping <ArrowRight size={16} />
+          Continue Shopping <ArrowRight size={16} aria-hidden="true" />
         </Link>
       </div>
     )
@@ -40,16 +40,28 @@ export default function CartPage() {
                 <p className="text-blue-600 font-bold mt-1">{formatCurrency(product.price)}</p>
               </div>
               <div className="flex flex-col items-end gap-3">
-                <button onClick={() => removeFromCart(product.id)} className="text-gray-300 hover:text-red-500 transition-colors">
-                  <Trash2 size={16} />
+                <button
+                  onClick={() => removeFromCart(product.id)}
+                  aria-label={`Remove ${product.name} from cart`}
+                  className="text-gray-300 hover:text-red-500 transition-colors"
+                >
+                  <Trash2 size={16} aria-hidden="true" />
                 </button>
                 <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-                  <button onClick={() => updateQuantity(product.id, quantity - 1)} className="px-2 py-1 hover:bg-gray-50">
-                    <Minus size={14} />
+                  <button
+                    onClick={() => updateQuantity(product.id, quantity - 1)}
+                    aria-label={`Decrease quantity of ${product.name}`}
+                    className="px-2 py-1 hover:bg-gray-50"
+                  >
+                    <Minus size={14} aria-hidden="true" />
                   </button>
-                  <span className="px-3 py-1 text-sm font-medium">{quantity}</span>
-                  <button onClick={() => updateQuantity(product.id, Math.min(product.stock, quantity + 1))} className="px-2 py-1 hover:bg-gray-50">
-                    <Plus size={14} />
+                  <span className="px-3 py-1 text-sm font-medium" aria-live="polite">{quantity}</span>
+                  <button
+                    onClick={() => updateQuantity(product.id, Math.min(product.stock, quantity + 1))}
+                    aria-label={`Increase quantity of ${product.name}`}
+                    className="px-2 py-1 hover:bg-gray-50"
+                  >
+                    <Plus size={14} aria-hidden="true" />
                   </button>
                 </div>
               </div>
@@ -75,7 +87,7 @@ export default function CartPage() {
           </div>
           <Link href="/shop/checkout"
             className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-3 rounded-xl font-medium hover:bg-blue-700 transition-colors">
-            Checkout <ArrowRight size={16} />
+            Checkout <ArrowRight size={16} aria-hidden="true" />
           </Link>
           <Link href="/shop/products" className="block text-center text-sm text-gray-500 hover:text-gray-700">
             Continue Shopping

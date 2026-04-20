@@ -4,9 +4,9 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Image from 'next/image'
 import Link from 'next/link'
-import { ArrowLeft, Minus, Plus, Package, ShoppingCart, Heart, ChevronRight, Share2, Truck, Shield, RotateCcw } from 'lucide-react'
+import { ArrowLeft, Minus, Plus, Package, ShoppingCart, Heart, ChevronRight, Share2, Truck, Shield, RotateCcw, AlertCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { productsApi, reviewsApi, trackProductView } from '@/lib/api'
+import { productsApi, reviewsApi, trackProductView, getApiErrorMessage } from '@/lib/api'
 import { useAuth } from '@/context/AuthContext'
 import { useCart } from '@/context/CartContext'
 import { useWishlist } from '@/context/WishlistContext'
@@ -45,6 +45,7 @@ export default function ProductDetailPage() {
   const [reviews, setReviews] = useState<Review[]>([])
   const [avgRating, setAvgRating] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
+  const [fetchError, setFetchError] = useState(false)
   const [activeImg, setActiveImg] = useState(0)
   const [qty, setQty] = useState(1)
   const [rating, setRating] = useState(5)
@@ -56,7 +57,9 @@ export default function ProductDetailPage() {
       const res = await reviewsApi.getAll(productId)
       setReviews(res.reviews)
       setAvgRating(res.avgRating !== null && res.avgRating !== undefined ? Number(res.avgRating) : null)
-    } catch {}
+    } catch {
+      // Reviews failing is non-critical — don't show error, just leave empty
+    }
   }
 
   useEffect(() => {
@@ -66,7 +69,10 @@ export default function ProductDetailPage() {
         loadReviews(data.id)
         trackProductView(data.id)
       })
-      .catch(() => toast.error('Product not found'))
+      .catch(() => {
+        toast.error('Product not found')
+        setFetchError(true)
+      })
       .finally(() => setLoading(false))
   }, [id])
 
@@ -94,36 +100,45 @@ export default function ProductDetailPage() {
       setRating(5)
       loadReviews(product.id)
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Failed to submit review'
-      toast.error(msg)
+      toast.error(getApiErrorMessage(err, 'Failed to submit review'))
     } finally {
       setSubmitting(false)
     }
   }
 
   if (loading) return <DetailSkeleton />
-  if (!product) return null
+
+  if (fetchError || !product) return (
+    <div className="text-center py-24 space-y-3 text-gray-400">
+      <AlertCircle size={48} className="mx-auto opacity-40" />
+      <p className="text-lg font-medium">Product not found</p>
+      <Link href="/shop/products" className="text-blue-600 hover:underline text-sm">
+        Back to products
+      </Link>
+    </div>
+  )
 
   const images = product.ProductImages || []
   const stockStatus = getStockStatus(product.stock)
   const inWishlist = isInWishlist(product.id)
+  const activeImage = images[activeImg]
 
   return (
     <div className="space-y-12">
       {/* Breadcrumb */}
-      <nav className="flex items-center gap-1.5 text-sm text-gray-400">
+      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-gray-400">
         <Link href="/shop" className="hover:text-gray-600 transition-colors">Home</Link>
-        <ChevronRight size={14} />
+        <ChevronRight size={14} aria-hidden="true" />
         <Link href="/shop/products" className="hover:text-gray-600 transition-colors">Products</Link>
         {product.category && (
           <>
-            <ChevronRight size={14} />
+            <ChevronRight size={14} aria-hidden="true" />
             <Link href={`/shop/products?category=${encodeURIComponent(product.category)}`} className="hover:text-gray-600 transition-colors">
               {product.category}
             </Link>
           </>
         )}
-        <ChevronRight size={14} />
+        <ChevronRight size={14} aria-hidden="true" />
         <span className="text-gray-600 font-medium truncate max-w-48">{product.name}</span>
       </nav>
 
@@ -131,9 +146,9 @@ export default function ProductDetailPage() {
         {/* Images */}
         <div className="space-y-3">
           <div className="aspect-square bg-gray-50 rounded-2xl overflow-hidden border border-gray-100">
-            {images[activeImg] ? (
+            {activeImage ? (
               <Image
-                src={getImageUrl(images[activeImg].imageUrl)}
+                src={getImageUrl(activeImage.imageUrl)}
                 alt={product.name}
                 width={600}
                 height={600}
@@ -141,25 +156,28 @@ export default function ProductDetailPage() {
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center">
-                <Package size={80} className="text-gray-200" />
+                <Package size={80} className="text-gray-200" aria-hidden="true" />
               </div>
             )}
           </div>
           {images.length > 1 && (
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-5 gap-2" role="group" aria-label="Product images">
               {images.map((img, i) => (
                 <button
                   key={img.id}
                   onClick={() => setActiveImg(i)}
+                  aria-label={`View image ${i + 1}`}
+                  aria-pressed={i === activeImg}
                   className={`aspect-square rounded-xl overflow-hidden border-2 transition-colors ${
                     i === activeImg ? 'border-blue-500' : 'border-transparent hover:border-gray-200'
                   }`}
                 >
                   <Image
                     src={getImageUrl(img.imageUrl)}
-                    alt={`${product.name} ${i + 1}`}
+                    alt={`${product.name} image ${i + 1}`}
                     width={80}
                     height={80}
+                    sizes="80px"
                     className="w-full h-full object-cover"
                   />
                 </button>
@@ -209,7 +227,7 @@ export default function ProductDetailPage() {
               <span className={`w-1.5 h-1.5 rounded-full ${
                 stockStatus === 'ok' ? 'bg-green-500' :
                 stockStatus === 'low' ? 'bg-amber-500' : 'bg-red-500'
-              }`} />
+              }`} aria-hidden="true" />
               {stockStatus === 'ok' ? 'In Stock' : stockStatus === 'low' ? `Only ${product.stock} left` : 'Out of Stock'}
             </span>
           </div>
@@ -218,51 +236,55 @@ export default function ProductDetailPage() {
           {stockStatus !== 'out' ? (
             <div className="space-y-3">
               <div className="flex items-center gap-4">
-                <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden">
+                <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden" role="group" aria-label="Quantity">
                   <button
                     onClick={() => setQty(q => Math.max(1, q - 1))}
+                    aria-label="Decrease quantity"
                     className="px-3 py-2.5 hover:bg-gray-50 text-gray-600 transition-colors"
                   >
-                    <Minus size={15} />
+                    <Minus size={15} aria-hidden="true" />
                   </button>
-                  <span className="px-4 py-2 font-semibold text-gray-900 min-w-12 text-center">{qty}</span>
+                  <span className="px-4 py-2 font-semibold text-gray-900 min-w-12 text-center" aria-live="polite">{qty}</span>
                   <button
                     onClick={() => setQty(q => Math.min(product.stock, q + 1))}
+                    aria-label="Increase quantity"
                     className="px-3 py-2.5 hover:bg-gray-50 text-gray-600 transition-colors"
                   >
-                    <Plus size={15} />
+                    <Plus size={15} aria-hidden="true" />
                   </button>
                 </div>
                 <button
                   onClick={handleAddToCart}
                   className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors"
                 >
-                  <ShoppingCart size={18} />
+                  <ShoppingCart size={18} aria-hidden="true" />
                   Add to Cart
                 </button>
               </div>
               <button
                 onClick={handleWishlist}
+                aria-label={inWishlist ? 'Remove from wishlist' : 'Save to wishlist'}
                 className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl border font-medium transition-colors text-sm ${
                   inWishlist
                     ? 'border-red-200 text-red-500 bg-red-50 hover:bg-red-100'
                     : 'border-gray-200 text-gray-600 hover:bg-gray-50'
                 }`}
               >
-                <Heart size={16} fill={inWishlist ? 'currentColor' : 'none'} />
+                <Heart size={16} fill={inWishlist ? 'currentColor' : 'none'} aria-hidden="true" />
                 {inWishlist ? 'Remove from Wishlist' : 'Save to Wishlist'}
               </button>
             </div>
           ) : (
             <button
               onClick={handleWishlist}
+              aria-label={inWishlist ? 'Remove from wishlist' : 'Notify me when available'}
               className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl border font-medium transition-colors text-sm ${
                 inWishlist
                   ? 'border-red-200 text-red-500 bg-red-50 hover:bg-red-100'
                   : 'border-gray-200 text-gray-600 hover:bg-gray-50'
               }`}
             >
-              <Heart size={16} fill={inWishlist ? 'currentColor' : 'none'} />
+              <Heart size={16} fill={inWishlist ? 'currentColor' : 'none'} aria-hidden="true" />
               {inWishlist ? 'Remove from Wishlist' : 'Notify me when available'}
             </button>
           )}
@@ -275,7 +297,7 @@ export default function ProductDetailPage() {
               { icon: RotateCcw, label: 'Easy returns', sub: '30-day policy' },
             ].map(({ icon: Icon, label, sub }) => (
               <div key={label} className="flex flex-col items-center text-center gap-1 py-2">
-                <Icon size={18} className="text-blue-600" />
+                <Icon size={18} className="text-blue-600" aria-hidden="true" />
                 <p className="text-xs font-semibold text-gray-700">{label}</p>
                 <p className="text-[10px] text-gray-400">{sub}</p>
               </div>
@@ -290,7 +312,7 @@ export default function ProductDetailPage() {
             }}
             className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-600 transition-colors"
           >
-            <Share2 size={14} />
+            <Share2 size={14} aria-hidden="true" />
             Share this product
           </button>
         </div>
@@ -323,20 +345,26 @@ export default function ProductDetailPage() {
               <label className="text-sm text-gray-500">Your rating</label>
               <StarRating value={rating} interactive onChange={setRating} />
             </div>
-            <textarea
-              value={comment}
-              onChange={e => setComment(e.target.value)}
-              placeholder="Share your experience with this product..."
-              rows={3}
-              className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-            />
+            <div className="space-y-1">
+              <label htmlFor="review-comment" className="text-sm text-gray-500">Your comment (optional)</label>
+              <textarea
+                id="review-comment"
+                value={comment}
+                onChange={e => setComment(e.target.value)}
+                placeholder="Share your experience with this product..."
+                rows={3}
+                maxLength={2000}
+                className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+              />
+            </div>
             <div className="flex justify-end">
               <button
                 type="submit"
                 disabled={submitting}
+                aria-busy={submitting}
                 className="px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
-                {submitting ? 'Submitting...' : 'Submit Review'}
+                {submitting ? 'Submitting review...' : 'Submit Review'}
               </button>
             </div>
           </form>
@@ -353,7 +381,7 @@ export default function ProductDetailPage() {
               <div key={r.id} className="bg-white rounded-2xl p-5 border border-gray-100">
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-sm font-bold shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-sm font-bold shrink-0" aria-hidden="true">
                       {(r.user?.name ?? 'U').charAt(0).toUpperCase()}
                     </div>
                     <div>
