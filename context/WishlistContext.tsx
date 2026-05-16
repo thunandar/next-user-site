@@ -30,7 +30,10 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user])
 
-  useEffect(() => { refresh() }, [refresh])
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing wishlist from server when user changes
+    refresh()
+  }, [refresh])
 
   const toggle = async (productId: number) => {
     if (toggling.has(productId)) return // prevent concurrent toggles on same item

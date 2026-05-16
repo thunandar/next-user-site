@@ -11,6 +11,9 @@ interface AuthContextValue {
   isLoading: boolean
   login: (email: string, password: string) => Promise<void>
   register: (data: RegisterData) => Promise<void>
+  verifyEmail: (email: string, code: string) => Promise<void>
+  resendVerification: (email: string) => Promise<void>
+  loginWithGoogle: (idToken: string) => Promise<void>
   logout: () => Promise<void>
 }
 
@@ -42,7 +45,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const register = async (data: RegisterData) => {
-    const { user, tokens } = await authApi.register(data)
+    await authApi.register(data)
+  }
+
+  const verifyEmail = async (email: string, code: string) => {
+    const { user, tokens } = await authApi.verifyEmail(email, code)
+    tokenStore.set(tokens.accessToken)
+    setUser(user)
+    router.push('/shop')
+  }
+
+  const resendVerification = async (email: string) => {
+    await authApi.resendVerification(email)
+  }
+
+  const loginWithGoogle = async (idToken: string) => {
+    const { user, tokens } = await authApi.google(idToken)
     tokenStore.set(tokens.accessToken)
     setUser(user)
     router.push('/shop')
@@ -60,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, verifyEmail, resendVerification, loginWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   )

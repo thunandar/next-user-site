@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
-const REFRESH_COOKIE_MAX_AGE = 30 * 24 * 60 * 60
+import { API_URL, REFRESH_COOKIE_NAME, refreshCookieOptions } from '@/lib/server-config'
 
 export async function POST(req: NextRequest) {
-  const refreshToken = req.cookies.get('refresh_token')?.value
+  const refreshToken = req.cookies.get(REFRESH_COOKIE_NAME)?.value
 
   if (!refreshToken) {
     return NextResponse.json({ success: false, message: 'No refresh token' }, { status: 401 })
@@ -20,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   if (!backendRes.ok) {
     const response = NextResponse.json(data, { status: backendRes.status })
-    response.cookies.delete('refresh_token')
+    response.cookies.delete(REFRESH_COOKIE_NAME)
     return response
   }
 
@@ -30,13 +28,7 @@ export async function POST(req: NextRequest) {
 
   // Rotate the refresh token if the backend returned a new one
   if (newRefreshToken) {
-    response.cookies.set('refresh_token', newRefreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: REFRESH_COOKIE_MAX_AGE,
-      path: '/',
-    })
+    response.cookies.set(REFRESH_COOKIE_NAME, newRefreshToken, refreshCookieOptions)
   }
 
   return response

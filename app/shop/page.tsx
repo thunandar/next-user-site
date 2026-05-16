@@ -1,166 +1,494 @@
-'use client'
+'use client';
 
-import { useEffect, useState } from 'react'
-import Link from 'next/link'
-import { ArrowRight, ShieldCheck, Truck, RefreshCw, Zap, Package, ChevronRight } from 'lucide-react'
-import { productsApi, categoriesApi } from '@/lib/api'
-import ProductCard from '@/components/shop/ProductCard'
-import type { Product } from '@/types'
+import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
+import { productsApi, journalApi, vendorsApi, type JournalPost, type Vendor, type TrustIconKey } from '@/lib/api';
+import { useSiteSettings } from '@/context/SiteSettingsContext';
+import ProductCard from '@/components/shop/ProductCard';
+import VendorMarquee from '@/components/shop/VendorMarquee';
+import Card from '@/components/ui/Card';
+import SectionHead from '@/components/ui/SectionHead';
+import Button, { IconBtn } from '@/components/ui/Button';
+import PlaceholderImg from '@/components/ui/PlaceholderImg';
+import { I } from '@/components/ui/Icons';
+import { formatCurrency, getPrimaryImage, getImageUrl } from '@/lib/utils';
+import type { Product } from '@/types';
 
-const features = [
-  { icon: Truck, title: 'Free Shipping', desc: 'On orders over $50', color: 'text-emerald-600 bg-emerald-50' },
-  { icon: ShieldCheck, title: 'Secure Payment', desc: '100% protected checkout', color: 'text-blue-600 bg-blue-50' },
-  { icon: RefreshCw, title: 'Easy Returns', desc: '30-day hassle-free returns', color: 'text-violet-600 bg-violet-50' },
-  { icon: Zap, title: 'Fast Delivery', desc: 'Same-day dispatch available', color: 'text-amber-600 bg-amber-50' },
-]
+const TRUST_FALLBACK: { iconKey: TrustIconKey; title: string; sub: string }[] = [
+  { iconKey: 'truck', title: 'Free shipping over $80', sub: 'Carbon-neutral, tracked' },
+  { iconKey: 'refund', title: '60-day returns', sub: 'No questions asked' },
+  { iconKey: 'shield', title: 'Secure checkout', sub: 'Encrypted end-to-end' },
+  { iconKey: 'chat', title: 'Human support', sub: 'Written replies, 24h' },
+];
+
+const renderTrustIcon = (key: TrustIconKey, size = 22) => {
+  const Cmp = (I as Record<string, (p: { size?: number }) => React.ReactElement>)[key] ?? I.truck;
+  return <Cmp size={size} />;
+};
 
 export default function ShopHomePage() {
-  const [latest, setLatest] = useState<Product[]>([])
-  const [categories, setCategories] = useState<string[]>([])
+  const settings = useSiteSettings();
+  const hero = settings?.hero;
+  const [featured, setFeatured] = useState<Product[]>([]);
+  const [bestsellers, setBestsellers] = useState<Product[]>([]);
+  const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [stats, setStats] = useState<{
+    totalProducts: number;
+    totalVendors: number;
+    avgRating: number | null;
+    totalReviews: number;
+  } | null>(null);
+  const [latestPost, setLatestPost] = useState<JournalPost | null>(null);
+
+  const railRef = useRef<HTMLDivElement | null>(null);
+  const [canPrev, setCanPrev] = useState(false);
+  const [canNext, setCanNext] = useState(false);
+
+  const updateRailEdges = () => {
+    const el = railRef.current;
+    if (!el) return;
+    setCanPrev(el.scrollLeft > 4);
+    setCanNext(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  };
+
+  const scrollRail = (dir: 1 | -1) => {
+    const el = railRef.current;
+    if (!el) return;
+    const card = el.querySelector<HTMLElement>('[data-rail-item]');
+    const step = card ? card.offsetWidth + 20 : el.clientWidth * 0.9;
+    el.scrollBy({ left: dir * step * 2, behavior: 'smooth' });
+  };
 
   useEffect(() => {
-    productsApi.getAll({ page: 1, limit: 8, sortBy: 'createdAt', sortOrder: 'DESC' })
-      .then(res => setLatest(res.data))
-      .catch(() => {})
-    categoriesApi.getAll()
-      .then(res => setCategories(res.categories.slice(0, 8)))
-      .catch(() => {})
-  }, [])
+    updateRailEdges();
+    const el = railRef.current;
+    if (!el) return;
+    const onScroll = () => updateRailEdges();
+    el.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      el.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+    };
+  }, [featured.length]);
+
+  useEffect(() => {
+    productsApi
+      .getAll({ page: 1, limit: 8, sortBy: 'createdAt', sortOrder: 'DESC' })
+      .then((r) => setFeatured(r.data))
+      .catch(() => {});
+    productsApi
+      .getAll({ page: 1, limit: 4, sortBy: 'sales', sortOrder: 'DESC' })
+      .then((r) => setBestsellers(r.data))
+      .catch(() => {});
+    productsApi
+      .getStorefrontStats()
+      .then(setStats)
+      .catch(() => {});
+    vendorsApi
+      .list({ status: 'active' })
+      .then(setVendors)
+      .catch(() => {});
+    journalApi
+      .list(1, 1)
+      .then((r) => setLatestPost(r.posts[0] ?? null))
+      .catch(() => {});
+  }, []);
+
+  const heroProduct = featured[0];
 
   return (
-    <div className="space-y-20">
-
-      {/* Hero */}
-      <div className="relative overflow-hidden rounded-3xl bg-linear-to-br from-slate-900 via-blue-950 to-slate-900 text-white">
-        {/* Background blobs */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-150 h-75 bg-blue-600/20 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 right-0 w-72 h-72 bg-indigo-500/10 rounded-full blur-2xl pointer-events-none" />
-
-        <div className="relative z-10 px-8 py-24 md:py-32 text-center max-w-3xl mx-auto space-y-7">
-          <div className="inline-flex items-center gap-2 bg-white/10 border border-white/15 text-white/80 text-xs font-semibold px-4 py-1.5 rounded-full uppercase tracking-widest">
-            New arrivals every week
-          </div>
-
-          <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold leading-tight tracking-tight">
-            Shop the Best<br />
-            <span className="text-transparent bg-clip-text bg-linear-to-r from-blue-400 to-cyan-400">
-              Products Online
-            </span>
-          </h1>
-
-          <p className="text-base sm:text-lg text-slate-400 max-w-lg mx-auto leading-relaxed">
-            Thousands of products, unbeatable prices. Discover what everyone is shopping for.
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
-            <Link
-              href="/shop/products"
-              className="inline-flex items-center justify-center gap-2 bg-blue-500 hover:bg-blue-400 text-white font-semibold px-8 py-3.5 rounded-xl transition-colors shadow-lg shadow-blue-500/25"
-            >
-              Shop Now <ArrowRight size={17} />
-            </Link>
-            <Link
-              href="/register"
-              className="inline-flex items-center justify-center gap-2 bg-white/8 border border-white/15 text-white/90 font-medium px-8 py-3.5 rounded-xl hover:bg-white/15 transition-colors"
-            >
-              Create Account
-            </Link>
-          </div>
-        </div>
-      </div>
-
-      {/* Features */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {features.map(({ icon: Icon, title, desc, color }) => (
-          <div key={title} className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm flex flex-col gap-3 hover:shadow-md transition-shadow">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
-              <Icon size={19} />
-            </div>
+    <div>
+      {/* Hero split */}
+      <section style={{ maxWidth: 1440, margin: '0 auto', padding: '40px 24px 0' }}>
+        <div
+          className="grid gap-8"
+          style={{ gridTemplateColumns: 'minmax(0, 1.1fr) minmax(0, 1fr)' }}
+        >
+          <div className="flex flex-col justify-between" style={{ minHeight: 440 }}>
             <div>
-              <p className="text-sm font-semibold text-gray-900">{title}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Categories */}
-      {categories.length > 0 && (
-        <div className="space-y-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Browse Categories</h2>
-              <p className="text-sm text-gray-500 mt-1">Find exactly what you're looking for</p>
-            </div>
-            <Link href="/shop/products" className="hidden sm:flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium">
-              All products <ChevronRight size={15} />
-            </Link>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {categories.map(cat => (
-              <Link
-                key={cat}
-                href={`/shop/products?category=${encodeURIComponent(cat)}`}
-                className="group bg-white rounded-2xl border border-gray-100 p-4 hover:border-blue-200 hover:bg-blue-50/50 hover:shadow-md transition-all flex items-center justify-between"
+              <div className="t-micro" style={{ color: 'var(--terracotta-2)' }}>
+                {hero?.eyebrow ?? 'Spring 026 · The Quiet Edit'}
+              </div>
+              <h1
+                style={{
+                  fontFamily: 'var(--serif)',
+                  fontSize: 'clamp(44px, 6vw, 96px)',
+                  lineHeight: 0.95,
+                  letterSpacing: -0.01,
+                  color: 'var(--ink)',
+                  marginTop: 14,
+                }}
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-gray-100 group-hover:bg-blue-100 flex items-center justify-center transition-colors">
-                    <Package size={15} className="text-gray-500 group-hover:text-blue-600 transition-colors" />
-                  </div>
-                  <span className="text-sm font-semibold text-gray-700 group-hover:text-blue-700 transition-colors">{cat}</span>
-                </div>
-                <ChevronRight size={14} className="text-gray-300 group-hover:text-blue-400 transition-colors" />
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* New Arrivals */}
-      {latest.length > 0 && (
-        <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">New Arrivals</h2>
-              <p className="text-sm text-gray-500 mt-1">Fresh products just added</p>
+                {hero?.headlineLead ?? 'Objects, made'}{' '}
+                <span style={{ fontStyle: 'italic', color: 'var(--terracotta)' }}>
+                  {hero?.headlineAccent ?? 'slowly,'}
+                </span>
+                <br />
+                {hero?.headlineTrail ?? 'for keeping.'}
+              </h1>
+              <p
+                style={{
+                  fontSize: 16,
+                  lineHeight: 1.6,
+                  color: 'var(--ink-2)',
+                  marginTop: 20,
+                  maxWidth: 520,
+                }}
+              >
+                {hero?.body ??
+                  'A short list of things our small studio loves — shipped from makers who take their time. No newsletters, no tricks, just the objects we use every day.'}
+              </p>
+              <div className="flex gap-3 mt-8">
+                <Link href={hero?.primaryCtaHref ?? '/shop/products'}>
+                  <Button variant="primary" size="lg" iconRight={<I.arr_r />}>
+                    {hero?.primaryCtaLabel ?? 'Shop the edit'}
+                  </Button>
+                </Link>
+                <Link href={hero?.secondaryCtaHref ?? '/shop/journal'}>
+                  <Button variant="ghost" size="lg">
+                    {hero?.secondaryCtaLabel ?? 'Read the journal'}
+                  </Button>
+                </Link>
+              </div>
             </div>
-            <Link href="/shop/products" className="hidden sm:flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium">
-              View all <ChevronRight size={15} />
-            </Link>
+
+            <div
+              className="grid grid-cols-3 gap-6"
+              style={{ borderTop: '1px solid var(--line)', paddingTop: 24, marginTop: 40 }}
+            >
+              <div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: 28 }}>
+                  {stats ? stats.totalProducts : '—'}
+                </div>
+                <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>pieces curated</div>
+              </div>
+              <div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: 28 }}>
+                  {stats ? stats.totalVendors : '—'}
+                </div>
+                <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>independent makers</div>
+              </div>
+              <div>
+                <div style={{ fontFamily: 'var(--serif)', fontSize: 28 }}>
+                  {stats?.avgRating != null ? stats.avgRating.toFixed(1) : '—'}
+                </div>
+                <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>avg. review</div>
+              </div>
+            </div>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {latest.map(p => <ProductCard key={p.id} product={p} />)}
-          </div>
-          <div className="flex sm:hidden justify-center">
-            <Link href="/shop/products" className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium">
-              View all products <ChevronRight size={15} />
-            </Link>
+
+          <div style={{ position: 'relative' }}>
+            {(() => {
+              const heroImg = heroProduct ? getPrimaryImage(heroProduct.ProductImages) : null;
+              const hasHeroImg = heroImg && heroImg !== '/placeholder.png';
+              return hasHeroImg ? (
+                <div
+                  style={{
+                    position: 'relative',
+                    width: '100%',
+                    height: 620,
+                    borderRadius: 20,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <Image
+                    src={heroImg}
+                    alt={heroProduct!.name}
+                    fill
+                    priority
+                    sizes="(max-width: 1024px) 100vw, 50vw"
+                    style={{ objectFit: 'cover' }}
+                  />
+                </div>
+              ) : (
+                <PlaceholderImg
+                  label={heroProduct?.name || 'Featured'}
+                  h={620}
+                  tone={['#E8C99B', '#C26A47']}
+                  style={{ borderRadius: 20 }}
+                />
+              );
+            })()}
+            {heroProduct && (
+              <Card
+                padding={20}
+                style={{
+                  position: 'absolute',
+                  left: 20,
+                  right: 20,
+                  bottom: 20,
+                  backdropFilter: 'blur(8px)',
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="t-micro" style={{ color: 'var(--ink-3)' }}>
+                      Featured piece
+                    </div>
+                    <div
+                      style={{
+                        fontFamily: 'var(--serif)',
+                        fontSize: 22,
+                        color: 'var(--ink)',
+                        marginTop: 4,
+                      }}
+                    >
+                      {heroProduct.name}
+                    </div>
+                    <div style={{ fontSize: 13, color: 'var(--ink-3)', marginTop: 4 }}>
+                      {formatCurrency(heroProduct.price)} ·{' '}
+                      {(heroProduct as { vendor?: string }).vendor ?? 'Nexus'}
+                    </div>
+                  </div>
+                  <Link href={`/shop/products/${heroProduct.id}`}>
+                    <IconBtn icon={<I.arr_r />} variant="bordered" size={40} />
+                  </Link>
+                </div>
+              </Card>
+            )}
           </div>
         </div>
+      </section>
+
+      {/* Featured edit */}
+      <section style={{ maxWidth: 1440, margin: '80px auto 0', padding: '0 24px' }}>
+        <SectionHead
+          eyebrow={`The Quiet Edit · ${featured.length} pieces`}
+          title="What we’re loving"
+          right={
+            <div className="flex gap-2">
+              <IconBtn
+                icon={<I.chev_l />}
+                variant="bordered"
+                size={40}
+                onClick={() => scrollRail(-1)}
+                disabled={!canPrev}
+                style={{ opacity: canPrev ? 1 : 0.4, transition: 'opacity 200ms' }}
+              />
+              <IconBtn
+                icon={<I.chev_r />}
+                variant="bordered"
+                size={40}
+                onClick={() => scrollRail(1)}
+                disabled={!canNext}
+                style={{ opacity: canNext ? 1 : 0.4, transition: 'opacity 200ms' }}
+              />
+            </div>
+          }
+        />
+        <div
+          ref={railRef}
+          className="mt-6 nx-rail"
+          style={{
+            display: 'flex',
+            gap: 20,
+            overflowX: 'auto',
+            scrollSnapType: 'x mandatory',
+            scrollPaddingLeft: 0,
+            scrollBehavior: 'smooth',
+            paddingBottom: 4,
+          }}
+        >
+          {featured.slice(0, 8).map((p) => (
+            <div
+              key={p.id}
+              data-rail-item
+              style={{
+                flex: '0 0 auto',
+                width: 'clamp(240px, 28vw, 320px)',
+                scrollSnapAlign: 'start',
+              }}
+            >
+              <ProductCard product={p} />
+            </div>
+          ))}
+        </div>
+        <style jsx>{`
+          .nx-rail {
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+          }
+          .nx-rail::-webkit-scrollbar {
+            display: none;
+          }
+        `}</style>
+      </section>
+
+      {/* Editorial */}
+      {latestPost && (
+        <section style={{ maxWidth: 1440, margin: '80px auto 0', padding: '0 24px' }}>
+          <div
+            className="grid gap-8 md:grid-cols-2"
+            style={{
+              background: 'var(--ink)',
+              color: 'var(--bg)',
+              padding: 48,
+              borderRadius: 20,
+            }}
+          >
+            <div className="flex flex-col justify-between">
+              <div>
+                <div
+                  className="t-micro"
+                  style={{ color: 'rgba(255,255,255,0.5)', marginBottom: 12 }}
+                >
+                  {latestPost.eyebrow || 'From the Journal'}
+                </div>
+                <div
+                  style={{
+                    fontFamily: 'var(--serif)',
+                    fontSize: 44,
+                    lineHeight: 1.05,
+                    color: 'var(--bg)',
+                  }}
+                >
+                  {latestPost.title}
+                </div>
+                {latestPost.excerpt && (
+                  <p
+                    style={{
+                      marginTop: 16,
+                      color: 'rgba(255,255,255,0.7)',
+                      maxWidth: 500,
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {latestPost.excerpt}
+                  </p>
+                )}
+              </div>
+              <div className="mt-8">
+                <Link
+                  href={`/shop/journal/${latestPost.slug}`}
+                  style={{
+                    display: 'inline-block',
+                    background: 'transparent',
+                    border: '1px solid rgba(255,255,255,0.3)',
+                    color: 'var(--bg)',
+                    padding: '12px 20px',
+                    borderRadius: 999,
+                    fontSize: 14,
+                    fontWeight: 500,
+                    textDecoration: 'none',
+                  }}
+                >
+                  Read the piece →
+                </Link>
+              </div>
+            </div>
+            <div
+              style={{
+                position: 'relative',
+                height: 360,
+                borderRadius: 16,
+                overflow: 'hidden',
+                background: 'var(--bg-muted)',
+              }}
+            >
+              {latestPost.coverImageUrl ? (
+                <Image
+                  src={getImageUrl(latestPost.coverImageUrl)}
+                  alt={latestPost.title}
+                  fill
+                  sizes="(min-width: 1024px) 640px, 100vw"
+                  style={{ objectFit: 'cover' }}
+                />
+              ) : (
+                <PlaceholderImg
+                  label={latestPost.title}
+                  h={360}
+                  tone={['#6B655C', '#2D2B26']}
+                  style={{ borderRadius: 16 }}
+                />
+              )}
+            </div>
+          </div>
+        </section>
       )}
 
-      {/* CTA */}
-      <div className="rounded-3xl bg-linear-to-r from-slate-900 to-slate-800 p-8 md:p-14 flex flex-col md:flex-row items-center justify-between gap-8">
-        <div className="text-center md:text-left">
-          <h2 className="text-2xl md:text-3xl font-bold text-white leading-snug">Ready to start shopping?</h2>
-          <p className="text-slate-400 mt-2 text-sm">Create a free account and unlock exclusive deals.</p>
-        </div>
-        <div className="flex gap-3 shrink-0">
-          <Link
-            href="/register"
-            className="px-6 py-3 bg-blue-500 hover:bg-blue-400 text-white font-semibold rounded-xl transition-colors text-sm shadow-lg shadow-blue-500/20"
-          >
-            Get started free
-          </Link>
-          <Link
-            href="/shop/products"
-            className="px-6 py-3 bg-white/8 border border-white/15 text-white font-medium rounded-xl hover:bg-white/15 transition-colors text-sm"
-          >
-            Browse products
-          </Link>
-        </div>
-      </div>
+      {/* Vendors strip */}
+      {vendors.length > 0 && (
+        <section style={{ marginTop: 80 }}>
+          <div style={{ maxWidth: 1440, margin: '0 auto', padding: '0 24px 18px' }}>
+            <div className="t-micro" style={{ color: 'var(--ink-3)' }}>
+              The makers
+            </div>
+            <h2
+              style={{
+                fontFamily: 'var(--serif)',
+                fontSize: 28,
+                lineHeight: 1.1,
+                color: 'var(--ink)',
+                marginTop: 6,
+                fontWeight: 400,
+              }}
+            >
+              Small studios, slow batches
+            </h2>
+          </div>
+          <VendorMarquee vendors={vendors} />
+        </section>
+      )}
 
+      {/* Bestsellers */}
+      <section style={{ maxWidth: 1440, margin: '80px auto 0', padding: '0 24px' }}>
+        <SectionHead
+          eyebrow="Worn-in favourites"
+          title="Bestsellers"
+          right={
+            <Link
+              href="/shop/products?sortBy=sales"
+              style={{ color: 'var(--terracotta-2)', fontSize: 13.5, textDecoration: 'none' }}
+            >
+              See all →
+            </Link>
+          }
+        />
+        <div
+          className="grid gap-5 mt-6"
+          style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}
+        >
+          {bestsellers.map((p) => (
+            <ProductCard key={p.id} product={p} />
+          ))}
+        </div>
+      </section>
+
+      {/* Trust strip */}
+      {(() => {
+        const items = settings?.trust?.items?.length ? settings.trust.items : TRUST_FALLBACK;
+        return (
+          <section style={{ maxWidth: 1440, margin: '80px auto 0', padding: '0 24px' }}>
+            <div
+              className="grid grid-cols-2 md:grid-cols-4"
+              style={{ borderTop: '1px solid var(--line)', borderBottom: '1px solid var(--line)' }}
+            >
+              {items.map((t, i) => (
+                <div
+                  key={`${t.title}-${i}`}
+                  className="flex items-center gap-3"
+                  style={{
+                    padding: '24px 20px',
+                    borderRight: i < items.length - 1 ? '1px solid var(--line)' : 'none',
+                  }}
+                >
+                  <span style={{ color: 'var(--terracotta)' }}>
+                    {renderTrustIcon(t.iconKey, 22)}
+                  </span>
+                  <div>
+                    <div style={{ fontSize: 14.5, fontWeight: 500, color: 'var(--ink)' }}>
+                      {t.title}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>{t.sub}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        );
+      })()}
     </div>
-  )
+  );
 }

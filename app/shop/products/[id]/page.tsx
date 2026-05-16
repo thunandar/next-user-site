@@ -1,184 +1,389 @@
-'use client'
+'use client';
 
-import { useEffect, useState } from 'react'
-import { useParams } from 'next/navigation'
-import Image from 'next/image'
-import Link from 'next/link'
-import { ArrowLeft, Minus, Plus, Package, ShoppingCart, Heart, ChevronRight, Share2, Truck, Shield, RotateCcw, AlertCircle } from 'lucide-react'
-import toast from 'react-hot-toast'
-import { productsApi, reviewsApi, trackProductView, getApiErrorMessage } from '@/lib/api'
-import { useAuth } from '@/context/AuthContext'
-import { useCart } from '@/context/CartContext'
-import { useWishlist } from '@/context/WishlistContext'
-import { formatCurrency, formatDate, getImageUrl, getStockStatus } from '@/lib/utils'
-import StarRating from '@/components/shop/StarRating'
-import { Skeleton } from '@/components/ui/Skeleton'
-import type { Product, Review } from '@/types'
+import { useEffect, useRef, useState } from 'react';
+import { useParams } from 'next/navigation';
+import Image from 'next/image';
+import Link from 'next/link';
+import toast from 'react-hot-toast';
+import {
+  productsApi,
+  reviewsApi,
+  trackProductView,
+  getApiErrorMessage,
+  type ReviewEligibility,
+  type TrustIconKey,
+} from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
+import { useCart } from '@/context/CartContext';
+import { useWishlist } from '@/context/WishlistContext';
+import { useSiteSettings } from '@/context/SiteSettingsContext';
+import { formatCurrency, getImageUrl, getStockStatus } from '@/lib/utils';
+import Button, { IconBtn } from '@/components/ui/Button';
+import Badge from '@/components/ui/Badge';
+import Card from '@/components/ui/Card';
+import PlaceholderImg from '@/components/ui/PlaceholderImg';
+import { I } from '@/components/ui/Icons';
+import ProductCard from '@/components/shop/ProductCard';
+import type { Product, ProductVariant, Review } from '@/types';
 
-function DetailSkeleton() {
-  return (
-    <div className="space-y-10">
-      <Skeleton className="h-4 w-48" />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-        <Skeleton className="aspect-square w-full rounded-2xl" />
-        <div className="space-y-4">
-          <Skeleton className="h-3 w-24" />
-          <Skeleton className="h-9 w-3/4" />
-          <Skeleton className="h-5 w-32" />
-          <Skeleton className="h-8 w-28" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-12 w-full rounded-xl" />
-          <Skeleton className="h-12 w-full rounded-xl" />
-        </div>
-      </div>
-    </div>
-  )
-}
+type Tab = 'details' | 'reviews';
 
 export default function ProductDetailPage() {
-  const { id } = useParams<{ id: string }>()
-  const { user } = useAuth()
-  const { addToCart } = useCart()
-  const { toggle, isInWishlist } = useWishlist()
+  const { id } = useParams<{ id: string }>();
+  const { user } = useAuth();
+  const { addToCart } = useCart();
+  const { toggle, isInWishlist } = useWishlist();
+  const settings = useSiteSettings();
+  const trustItems = (settings?.trust?.items ?? []).slice(0, 2);
+  const renderTrustIcon = (key: TrustIconKey, size = 15) => {
+    const Cmp = (I as Record<string, (p: { size?: number; style?: React.CSSProperties }) => React.ReactElement>)[key] ?? I.truck;
+    return <Cmp size={size} style={{ color: 'var(--sage)' }} />;
+  };
 
-  const [product, setProduct] = useState<Product | null>(null)
-  const [reviews, setReviews] = useState<Review[]>([])
-  const [avgRating, setAvgRating] = useState<number | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [fetchError, setFetchError] = useState(false)
-  const [activeImg, setActiveImg] = useState(0)
-  const [qty, setQty] = useState(1)
-  const [rating, setRating] = useState(5)
-  const [comment, setComment] = useState('')
-  const [submitting, setSubmitting] = useState(false)
+  const [product, setProduct] = useState<Product | null>(null);
+  const [related, setRelated] = useState<Product[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [avgRating, setAvgRating] = useState<number | null>(null);
+  const [totalReviews, setTotalReviews] = useState(0);
+  const [reviewsPage, setReviewsPage] = useState(1);
+  const [reviewsTotalPages, setReviewsTotalPages] = useState(1);
+  const [loadingMoreReviews, setLoadingMoreReviews] = useState(false);
+  const [eligibility, setEligibility] = useState<ReviewEligibility | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [activeImage, setActiveImage] = useState(0);
+  const [galleryHover, setGalleryHover] = useState(false);
+  const touchStartX = useRef<number | null>(null);
+  const touchDeltaX = useRef(0);
+  const [activeVariant, setActiveVariant] = useState<ProductVariant | null>(null);
+  const [quantity, setQuantity] = useState(1);
+  const [tab, setTab] = useState<Tab>('details');
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewHover, setReviewHover] = useState(0);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewCommentFocused, setReviewCommentFocused] = useState(false);
+  const [submittingReview, setSubmittingReview] = useState(false);
 
-  const loadReviews = async (productId: number) => {
-    try {
-      const res = await reviewsApi.getAll(productId)
-      setReviews(res.reviews)
-      setAvgRating(res.avgRating !== null && res.avgRating !== undefined ? Number(res.avgRating) : null)
-    } catch {
-      // Reviews failing is non-critical — don't show error, just leave empty
-    }
-  }
+  const REVIEWS_PER_PAGE = 5;
 
   useEffect(() => {
-    productsApi.getById(Number(id))
+    if (!id) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- resets loading indicator on product id change
+    setLoading(true);
+    productsApi
+      .getById(Number(id))
       .then(({ data }) => {
-        setProduct(data)
-        loadReviews(data.id)
-        trackProductView(data.id)
+        setProduct(data);
+        if (data.variants && data.variants.length > 0) setActiveVariant(data.variants[0] ?? null);
+        trackProductView(Number(id));
+        if (data.category) {
+          productsApi
+            .getAll({ category: data.category, limit: 4, page: 1 })
+            .then((r) => setRelated(r.data.filter((p) => p.id !== Number(id)).slice(0, 4)))
+            .catch(() => {});
+        }
       })
-      .catch(() => {
-        toast.error('Product not found')
-        setFetchError(true)
+      .catch((err) => toast.error(getApiErrorMessage(err, 'Failed to load product')))
+      .finally(() => setLoading(false));
+    reviewsApi
+      .getAll(Number(id), 1, REVIEWS_PER_PAGE)
+      .then((r) => {
+        setReviews(r.reviews);
+        setAvgRating(r.avgRating);
+        setTotalReviews(r.totalReviews);
+        setReviewsTotalPages(r.totalPages);
+        setReviewsPage(1);
+        setEligibility(r.eligibility);
       })
-      .finally(() => setLoading(false))
-  }, [id])
+      .catch(() => {});
+  }, [id, user?.id]);
 
-  const handleAddToCart = () => {
-    if (!product) return
-    addToCart(product, qty)
-    toast.success(`${product.name} added to cart`)
+  const loadMoreReviews = async () => {
+    if (!id || loadingMoreReviews || reviewsPage >= reviewsTotalPages) return;
+    setLoadingMoreReviews(true);
+    try {
+      const next = reviewsPage + 1;
+      const r = await reviewsApi.getAll(Number(id), next, REVIEWS_PER_PAGE);
+      setReviews((prev) => [...prev, ...r.reviews]);
+      setReviewsPage(next);
+      setReviewsTotalPages(r.totalPages);
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Failed to load more reviews'));
+    } finally {
+      setLoadingMoreReviews(false);
+    }
+  };
+
+  const submitReview = async () => {
+    if (!id || reviewRating === 0) return;
+    setSubmittingReview(true);
+    try {
+      await reviewsApi.create(Number(id), {
+        rating: reviewRating,
+        comment: reviewComment.trim() || undefined,
+      });
+      const fresh = await reviewsApi.getAll(Number(id), 1, REVIEWS_PER_PAGE);
+      setReviews(fresh.reviews);
+      setAvgRating(fresh.avgRating);
+      setTotalReviews(fresh.totalReviews);
+      setReviewsTotalPages(fresh.totalPages);
+      setReviewsPage(1);
+      setEligibility(fresh.eligibility);
+      setReviewRating(0);
+      setReviewHover(0);
+      setReviewComment('');
+      toast.success('Thanks for your review');
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Failed to submit review'));
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
+  if (loading || !product) {
+    return (
+      <div style={{ maxWidth: 1440, margin: '0 auto', padding: '40px 24px' }}>
+        <div style={{ height: 14, width: 200, background: 'var(--bg-muted)', borderRadius: 4 }} />
+        <div
+          className="grid md:grid-cols-2 gap-12 mt-6"
+          style={{ gridTemplateColumns: 'minmax(0,1.2fr) minmax(0,1fr)' }}
+        >
+          <div
+            style={{
+              height: 620,
+              background: 'var(--bg-muted)',
+              borderRadius: 16,
+              animation: 'pulse 1.5s ease-in-out infinite',
+            }}
+          />
+          <div className="flex flex-col gap-3">
+            <div style={{ height: 12, width: 160, background: 'var(--bg-muted)', borderRadius: 4 }} />
+            <div style={{ height: 48, background: 'var(--bg-muted)', borderRadius: 8 }} />
+            <div style={{ height: 20, width: 180, background: 'var(--bg-muted)', borderRadius: 4 }} />
+            <div style={{ height: 100, background: 'var(--bg-muted)', borderRadius: 8 }} />
+          </div>
+        </div>
+      </div>
+    );
   }
+
+  const galleryImages = product.ProductImages ?? [];
+  const galleryCount = galleryImages.length;
+  const primary = galleryImages[activeImage];
+
+  const goPrev = () => {
+    if (galleryCount < 2) return;
+    setActiveImage((i) => (i - 1 + galleryCount) % galleryCount);
+  };
+  const goNext = () => {
+    if (galleryCount < 2) return;
+    setActiveImage((i) => (i + 1) % galleryCount);
+  };
+  const stockStatus = getStockStatus(
+    activeVariant ? activeVariant.stock : product.stock,
+  );
+  const currentPrice =
+    activeVariant?.priceOverride ? Number(activeVariant.priceOverride) : Number(product.price);
+  const inWishlist = isInWishlist(product.id);
+  const vendor = product.vendor ?? 'Nexus';
+
+  const colorVariants = (product.variants ?? []).reduce<Record<string, ProductVariant[]>>(
+    (acc, v) => {
+      const key = v.color || 'Default';
+      acc[key] = acc[key] ?? [];
+      acc[key]!.push(v);
+      return acc;
+    },
+    {},
+  );
+  const allColors = Object.keys(colorVariants);
+  const activeColor = activeVariant?.color ?? allColors[0];
+  const sizesForColor = activeColor ? colorVariants[activeColor] ?? [] : [];
+
+  const addToCartClick = () => {
+    if (stockStatus === 'out') return;
+    addToCart(product, quantity);
+    toast.success(`${product.name} added to cart`);
+  };
 
   const handleWishlist = async () => {
-    if (!user) { toast.error('Please login first'); return }
-    const wasInWishlist = isInWishlist(product!.id)
-    await toggle(product!.id)
-    toast.success(wasInWishlist ? 'Removed from wishlist' : 'Added to wishlist')
-  }
-
-  const handleReview = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!user || !product) { toast.error('Please login to review'); return }
-    setSubmitting(true)
-    try {
-      await reviewsApi.create(product.id, { rating, comment })
-      toast.success('Review submitted!')
-      setComment('')
-      setRating(5)
-      loadReviews(product.id)
-    } catch (err: unknown) {
-      toast.error(getApiErrorMessage(err, 'Failed to submit review'))
-    } finally {
-      setSubmitting(false)
+    if (!user) {
+      toast.error('Sign in to save items');
+      return;
     }
-  }
-
-  if (loading) return <DetailSkeleton />
-
-  if (fetchError || !product) return (
-    <div className="text-center py-24 space-y-3 text-gray-400">
-      <AlertCircle size={48} className="mx-auto opacity-40" />
-      <p className="text-lg font-medium">Product not found</p>
-      <Link href="/shop/products" className="text-blue-600 hover:underline text-sm">
-        Back to products
-      </Link>
-    </div>
-  )
-
-  const images = product.ProductImages || []
-  const stockStatus = getStockStatus(product.stock)
-  const inWishlist = isInWishlist(product.id)
-  const activeImage = images[activeImg]
+    await toggle(product.id);
+    toast.success(inWishlist ? 'Removed' : 'Saved');
+  };
 
   return (
-    <div className="space-y-12">
-      {/* Breadcrumb */}
-      <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-sm text-gray-400">
-        <Link href="/shop" className="hover:text-gray-600 transition-colors">Home</Link>
-        <ChevronRight size={14} aria-hidden="true" />
-        <Link href="/shop/products" className="hover:text-gray-600 transition-colors">Products</Link>
-        {product.category && (
-          <>
-            <ChevronRight size={14} aria-hidden="true" />
-            <Link href={`/shop/products?category=${encodeURIComponent(product.category)}`} className="hover:text-gray-600 transition-colors">
-              {product.category}
-            </Link>
-          </>
-        )}
-        <ChevronRight size={14} aria-hidden="true" />
-        <span className="text-gray-600 font-medium truncate max-w-48">{product.name}</span>
-      </nav>
+    <div style={{ maxWidth: 1440, margin: '0 auto', padding: '24px 24px 40px' }}>
+      <div className="t-small" style={{ marginBottom: 16 }}>
+        <Link href="/shop" style={{ color: 'var(--ink-3)', textDecoration: 'none' }}>
+          Shop
+        </Link>{' '}
+        /{' '}
+        <Link
+          href={`/shop/products?category=${product.category}`}
+          style={{ color: 'var(--ink-3)', textDecoration: 'none' }}
+        >
+          {product.category}
+        </Link>{' '}
+        / <span style={{ color: 'var(--ink)' }}>{product.name}</span>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-10 lg:gap-16">
-        {/* Images */}
-        <div className="space-y-3">
-          <div className="aspect-square bg-gray-50 rounded-2xl overflow-hidden border border-gray-100">
-            {activeImage ? (
+      <div
+        className="grid gap-12"
+        style={{ gridTemplateColumns: 'minmax(0, 1.2fr) minmax(0, 1fr)' }}
+      >
+        <div>
+          <div
+            onMouseEnter={() => setGalleryHover(true)}
+            onMouseLeave={() => setGalleryHover(false)}
+            onTouchStart={(e) => {
+              touchStartX.current = e.touches[0]?.clientX ?? null;
+              touchDeltaX.current = 0;
+            }}
+            onTouchMove={(e) => {
+              if (touchStartX.current == null) return;
+              touchDeltaX.current = (e.touches[0]?.clientX ?? touchStartX.current) - touchStartX.current;
+            }}
+            onTouchEnd={() => {
+              if (Math.abs(touchDeltaX.current) > 50) {
+                if (touchDeltaX.current < 0) goNext();
+                else goPrev();
+              }
+              touchStartX.current = null;
+              touchDeltaX.current = 0;
+            }}
+            style={{
+              borderRadius: 16,
+              overflow: 'hidden',
+              position: 'relative',
+              aspectRatio: '1/1',
+              touchAction: 'pan-y',
+            }}
+          >
+            {primary ? (
               <Image
-                src={getImageUrl(activeImage.imageUrl)}
+                src={getImageUrl(primary.imageUrl)}
                 alt={product.name}
-                width={600}
-                height={600}
-                className="w-full h-full object-cover"
+                fill
+                style={{ objectFit: 'cover' }}
+                sizes="(max-width:1024px) 100vw, 60vw"
+                draggable={false}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <Package size={80} className="text-gray-200" aria-hidden="true" />
-              </div>
+              <PlaceholderImg label={product.name} h="100%" w="100%" />
+            )}
+            {galleryCount > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={goPrev}
+                  aria-label="Previous image"
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: 12,
+                    transform: 'translateY(-50%)',
+                    width: 40,
+                    height: 40,
+                    borderRadius: 999,
+                    background: 'rgba(255,255,255,0.92)',
+                    border: '1px solid var(--line-2)',
+                    color: 'var(--ink)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: galleryHover ? 1 : 0,
+                    transition: 'opacity 160ms ease',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                  }}
+                >
+                  <I.chev_l size={16} />
+                </button>
+                <button
+                  type="button"
+                  onClick={goNext}
+                  aria-label="Next image"
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    right: 12,
+                    transform: 'translateY(-50%)',
+                    width: 40,
+                    height: 40,
+                    borderRadius: 999,
+                    background: 'rgba(255,255,255,0.92)',
+                    border: '1px solid var(--line-2)',
+                    color: 'var(--ink)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    opacity: galleryHover ? 1 : 0,
+                    transition: 'opacity 160ms ease',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                  }}
+                >
+                  <I.chev_r size={16} />
+                </button>
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: 12,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    display: 'inline-flex',
+                    gap: 6,
+                    padding: '6px 10px',
+                    borderRadius: 999,
+                    background: 'rgba(255,255,255,0.85)',
+                  }}
+                >
+                  {galleryImages.map((_, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 999,
+                        background: i === activeImage ? 'var(--ink)' : 'var(--line-2)',
+                      }}
+                    />
+                  ))}
+                </div>
+              </>
             )}
           </div>
-          {images.length > 1 && (
-            <div className="grid grid-cols-5 gap-2" role="group" aria-label="Product images">
-              {images.map((img, i) => (
+          {galleryCount > 1 && (
+            <div
+              className="grid gap-3 mt-3"
+              style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}
+            >
+              {galleryImages.slice(0, 4).map((img, i) => (
                 <button
                   key={img.id}
-                  onClick={() => setActiveImg(i)}
-                  aria-label={`View image ${i + 1}`}
-                  aria-pressed={i === activeImg}
-                  className={`aspect-square rounded-xl overflow-hidden border-2 transition-colors ${
-                    i === activeImg ? 'border-blue-500' : 'border-transparent hover:border-gray-200'
-                  }`}
+                  type="button"
+                  onClick={() => setActiveImage(i)}
+                  style={{
+                    height: 120,
+                    borderRadius: 12,
+                    overflow: 'hidden',
+                    border:
+                      i === activeImage ? '2px solid var(--ink)' : '2px solid transparent',
+                    padding: 0,
+                    background: 'var(--bg-muted)',
+                    cursor: 'pointer',
+                    position: 'relative',
+                  }}
                 >
                   <Image
                     src={getImageUrl(img.imageUrl)}
-                    alt={`${product.name} image ${i + 1}`}
-                    width={80}
-                    height={80}
-                    sizes="80px"
-                    className="w-full h-full object-cover"
+                    alt={`${product.name} view ${i + 1}`}
+                    fill
+                    style={{ objectFit: 'cover' }}
+                    sizes="120px"
                   />
                 </button>
               ))}
@@ -186,217 +391,555 @@ export default function ProductDetailPage() {
           )}
         </div>
 
-        {/* Info */}
-        <div className="space-y-5">
-          {product.category && (
-            <Link
-              href={`/shop/products?category=${encodeURIComponent(product.category)}`}
-              className="inline-block text-xs font-semibold text-blue-600 uppercase tracking-widest hover:text-blue-700 transition-colors"
-            >
-              {product.category}
-            </Link>
-          )}
-
-          <div className="space-y-2">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 leading-tight">{product.name}</h1>
-            {avgRating !== null && (
-              <div className="flex items-center gap-2">
-                <StarRating value={Math.round(avgRating)} size={16} />
-                <span className="text-sm text-gray-500">
-                  {avgRating.toFixed(1)} <span className="text-gray-300">·</span> {reviews.length} {reviews.length === 1 ? 'review' : 'reviews'}
-                </span>
-              </div>
+        <div className="flex flex-col gap-4">
+          <div className="t-micro" style={{ color: 'var(--terracotta-2)' }}>
+            {vendor} {product.tags?.[0] ? `· ${product.tags[0]}` : ''}
+          </div>
+          <h1 style={{ fontFamily: 'var(--serif)', fontSize: 44, lineHeight: 1.05, color: 'var(--ink)' }}>
+            {product.name}
+          </h1>
+          <div className="flex items-center gap-3 mt-1">
+            <span className="inline-flex items-center gap-1">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <I.star_f
+                  key={i}
+                  size={15}
+                  style={{
+                    color:
+                      avgRating && i < Math.round(avgRating) ? 'var(--sand)' : 'var(--line-2)',
+                  }}
+                />
+              ))}
+            </span>
+            <span style={{ fontSize: 13, color: 'var(--ink-3)' }}>
+              {avgRating ? avgRating.toFixed(1) : '—'} · {totalReviews} {totalReviews === 1 ? 'review' : 'reviews'}
+            </span>
+            {stockStatus !== 'out' && (
+              <Badge tone="success" size="sm" dot>
+                In stock
+              </Badge>
             )}
           </div>
 
-          <div className="flex items-baseline gap-3">
-            <p className="text-3xl font-bold text-gray-900">{formatCurrency(product.price)}</p>
-          </div>
-
-          {product.description && (
-            <p className="text-gray-500 leading-relaxed text-sm">{product.description}</p>
-          )}
-
-          {/* Stock status */}
-          <div>
-            <span className={`inline-flex items-center gap-1.5 text-sm font-medium px-3 py-1.5 rounded-full ${
-              stockStatus === 'ok' ? 'bg-green-50 text-green-700' :
-              stockStatus === 'low' ? 'bg-amber-50 text-amber-700' :
-              'bg-red-50 text-red-700'
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${
-                stockStatus === 'ok' ? 'bg-green-500' :
-                stockStatus === 'low' ? 'bg-amber-500' : 'bg-red-500'
-              }`} aria-hidden="true" />
-              {stockStatus === 'ok' ? 'In Stock' : stockStatus === 'low' ? `Only ${product.stock} left` : 'Out of Stock'}
+          <div className="flex items-baseline gap-3 mt-3">
+            <span
+              style={{
+                fontFamily: 'var(--serif)',
+                fontSize: 40,
+                color: 'var(--ink)',
+                lineHeight: 1,
+              }}
+            >
+              {formatCurrency(currentPrice)}
             </span>
           </div>
 
-          {/* Qty + Add to cart */}
-          {stockStatus !== 'out' ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden" role="group" aria-label="Quantity">
-                  <button
-                    onClick={() => setQty(q => Math.max(1, q - 1))}
-                    aria-label="Decrease quantity"
-                    className="px-3 py-2.5 hover:bg-gray-50 text-gray-600 transition-colors"
-                  >
-                    <Minus size={15} aria-hidden="true" />
-                  </button>
-                  <span className="px-4 py-2 font-semibold text-gray-900 min-w-12 text-center" aria-live="polite">{qty}</span>
-                  <button
-                    onClick={() => setQty(q => Math.min(product.stock, q + 1))}
-                    aria-label="Increase quantity"
-                    className="px-3 py-2.5 hover:bg-gray-50 text-gray-600 transition-colors"
-                  >
-                    <Plus size={15} aria-hidden="true" />
-                  </button>
-                </div>
-                <button
-                  onClick={handleAddToCart}
-                  className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors"
-                >
-                  <ShoppingCart size={18} aria-hidden="true" />
-                  Add to Cart
-                </button>
-              </div>
-              <button
-                onClick={handleWishlist}
-                aria-label={inWishlist ? 'Remove from wishlist' : 'Save to wishlist'}
-                className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl border font-medium transition-colors text-sm ${
-                  inWishlist
-                    ? 'border-red-200 text-red-500 bg-red-50 hover:bg-red-100'
-                    : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                <Heart size={16} fill={inWishlist ? 'currentColor' : 'none'} aria-hidden="true" />
-                {inWishlist ? 'Remove from Wishlist' : 'Save to Wishlist'}
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={handleWishlist}
-              aria-label={inWishlist ? 'Remove from wishlist' : 'Notify me when available'}
-              className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl border font-medium transition-colors text-sm ${
-                inWishlist
-                  ? 'border-red-200 text-red-500 bg-red-50 hover:bg-red-100'
-                  : 'border-gray-200 text-gray-600 hover:bg-gray-50'
-              }`}
+          {product.description && (
+            <p
+              style={{
+                fontSize: 15,
+                lineHeight: 1.6,
+                color: 'var(--ink-2)',
+                marginTop: 8,
+              }}
             >
-              <Heart size={16} fill={inWishlist ? 'currentColor' : 'none'} aria-hidden="true" />
-              {inWishlist ? 'Remove from Wishlist' : 'Notify me when available'}
-            </button>
+              {product.description}
+            </p>
           )}
 
-          {/* Trust signals */}
-          <div className="grid grid-cols-3 gap-3 pt-2 border-t border-gray-100">
-            {[
-              { icon: Truck, label: 'Free shipping', sub: 'On orders over $50' },
-              { icon: Shield, label: 'Secure checkout', sub: '256-bit encryption' },
-              { icon: RotateCcw, label: 'Easy returns', sub: '30-day policy' },
-            ].map(({ icon: Icon, label, sub }) => (
-              <div key={label} className="flex flex-col items-center text-center gap-1 py-2">
-                <Icon size={18} className="text-blue-600" aria-hidden="true" />
-                <p className="text-xs font-semibold text-gray-700">{label}</p>
-                <p className="text-[10px] text-gray-400">{sub}</p>
+          {allColors.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div className="flex items-center justify-between mb-2">
+                <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ink-2)' }}>
+                  Colour
+                </span>
+                <span style={{ fontSize: 12.5, color: 'var(--ink-3)' }}>{activeColor}</span>
               </div>
-            ))}
-          </div>
-
-          {/* Share */}
-          <button
-            onClick={() => {
-              navigator.clipboard.writeText(window.location.href)
-              toast.success('Link copied!')
-            }}
-            className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <Share2 size={14} aria-hidden="true" />
-            Share this product
-          </button>
-        </div>
-      </div>
-
-      {/* Reviews */}
-      <div className="space-y-6 pt-4 border-t border-gray-100">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900">
-            Customer Reviews
-            {reviews.length > 0 && (
-              <span className="ml-2 text-sm font-normal text-gray-400">({reviews.length})</span>
-            )}
-          </h2>
-          {avgRating !== null && reviews.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-3xl font-bold text-gray-900">{avgRating.toFixed(1)}</span>
-              <div>
-                <StarRating value={Math.round(avgRating)} size={16} />
-                <p className="text-xs text-gray-400 mt-0.5">{reviews.length} reviews</p>
+              <div className="flex gap-2">
+                {allColors.map((c) => {
+                  const sample = colorVariants[c]?.[0];
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => {
+                        if (sample) setActiveVariant(sample);
+                      }}
+                      title={c}
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: 999,
+                        background: sample?.colorHex ?? '#E8C99B',
+                        border: activeColor === c ? '2px solid var(--ink)' : '1px solid var(--line-2)',
+                        padding: 0,
+                        cursor: 'pointer',
+                      }}
+                    />
+                  );
+                })}
               </div>
             </div>
           )}
-        </div>
 
-        {user && (
-          <form onSubmit={handleReview} className="bg-gray-50 rounded-2xl p-6 space-y-4 border border-gray-100">
-            <h3 className="font-semibold text-gray-900">Write a Review</h3>
-            <div className="space-y-1">
-              <label className="text-sm text-gray-500">Your rating</label>
-              <StarRating value={rating} interactive onChange={setRating} />
+          {sizesForColor.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <div className="flex items-center justify-between mb-2">
+                <span style={{ fontSize: 12.5, fontWeight: 500, color: 'var(--ink-2)' }}>Size</span>
+                <span style={{ fontSize: 12.5, color: 'var(--terracotta-2)' }}>Size guide</span>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                {sizesForColor.map((v) => {
+                  const active = activeVariant?.id === v.id;
+                  return (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => setActiveVariant(v)}
+                      disabled={v.stock === 0}
+                      style={{
+                        minWidth: 56,
+                        height: 40,
+                        padding: '0 14px',
+                        borderRadius: 10,
+                        background: active ? 'var(--ink)' : 'var(--bg-elev)',
+                        color: active ? 'var(--bg)' : 'var(--ink)',
+                        border: active ? '1px solid var(--ink)' : '1px solid var(--line-2)',
+                        fontSize: 13,
+                        cursor: v.stock === 0 ? 'not-allowed' : 'pointer',
+                        opacity: v.stock === 0 ? 0.4 : 1,
+                      }}
+                    >
+                      {v.size || v.name}
+                    </button>
+                  );
+                })}
+              </div>
+              {activeVariant && (
+                <div
+                  style={{
+                    marginTop: 10,
+                    fontSize: 12.5,
+                    color:
+                      activeVariant.stock === 0
+                        ? 'var(--ink-3)'
+                        : activeVariant.stock <= 5
+                        ? 'var(--terracotta-2)'
+                        : 'var(--ink-3)',
+                  }}
+                >
+                  {activeVariant.stock === 0
+                    ? 'Sold out in this size'
+                    : activeVariant.stock <= 5
+                    ? `Only ${activeVariant.stock} left in ${activeVariant.size || activeVariant.name}`
+                    : `${activeVariant.stock} in stock`}
+                </div>
+              )}
             </div>
-            <div className="space-y-1">
-              <label htmlFor="review-comment" className="text-sm text-gray-500">Your comment (optional)</label>
-              <textarea
-                id="review-comment"
-                value={comment}
-                onChange={e => setComment(e.target.value)}
-                placeholder="Share your experience with this product..."
-                rows={3}
-                maxLength={2000}
-                className="w-full px-4 py-3 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-              />
-            </div>
-            <div className="flex justify-end">
+          )}
+
+          <div className="flex items-center gap-3 mt-6">
+            <div
+              className="flex items-center"
+              style={{
+                border: '1px solid var(--line-2)',
+                borderRadius: 999,
+                background: 'var(--bg-elev)',
+                height: 46,
+                padding: '0 4px',
+              }}
+            >
               <button
-                type="submit"
-                disabled={submitting}
-                aria-busy={submitting}
-                className="px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                type="button"
+                onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 999,
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--ink-2)',
+                  cursor: 'pointer',
+                }}
               >
-                {submitting ? 'Submitting review...' : 'Submit Review'}
+                <I.minus size={14} />
+              </button>
+              <span style={{ minWidth: 30, textAlign: 'center', fontSize: 14 }}>{quantity}</span>
+              <button
+                type="button"
+                onClick={() => setQuantity(quantity + 1)}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 999,
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--ink-2)',
+                  cursor: 'pointer',
+                }}
+              >
+                <I.plus size={14} />
               </button>
             </div>
-          </form>
-        )}
-
-        {reviews.length === 0 ? (
-          <div className="text-center py-12 text-gray-400">
-            <p className="font-medium">No reviews yet</p>
-            <p className="text-sm mt-1">{user ? 'Be the first to review this product' : 'Login to write the first review'}</p>
+            <Button
+              variant="primary"
+              size="lg"
+              full
+              onClick={addToCartClick}
+              disabled={stockStatus === 'out'}
+            >
+              {stockStatus === 'out' ? 'Sold out' : `Add to cart · ${formatCurrency(currentPrice)}`}
+            </Button>
+            <IconBtn
+              icon={inWishlist ? <I.heart_f /> : <I.heart />}
+              variant="bordered"
+              size={46}
+              onClick={handleWishlist}
+              style={{ color: inWishlist ? 'var(--terracotta)' : 'var(--ink-2)' }}
+            />
           </div>
-        ) : (
-          <div className="space-y-4">
-            {reviews.map(r => (
-              <div key={r.id} className="bg-white rounded-2xl p-5 border border-gray-100">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 text-sm font-bold shrink-0" aria-hidden="true">
-                      {(r.user?.name ?? 'U').charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-900 text-sm">{r.user?.name ?? 'User'}</p>
-                      <StarRating value={r.rating} size={12} />
-                    </div>
-                  </div>
-                  <p className="text-xs text-gray-400 shrink-0">{formatDate(r.createdAt)}</p>
+
+          {trustItems.length > 0 && (
+            <div
+              className="grid grid-cols-2 gap-3 mt-4"
+              style={{
+                padding: 14,
+                background: 'var(--bg-muted)',
+                borderRadius: 12,
+                fontSize: 12.5,
+                color: 'var(--ink-2)',
+              }}
+            >
+              {trustItems.map((t, i) => (
+                <div key={`${t.title}-${i}`} className="flex items-center gap-2">
+                  {renderTrustIcon(t.iconKey, 15)} {t.title}
                 </div>
-                {r.comment && <p className="text-sm text-gray-600 leading-relaxed">{r.comment}</p>}
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-10">
+        <div
+          className="flex gap-8"
+          style={{ borderBottom: '1px solid var(--line)' }}
+        >
+          {(['details', 'reviews'] as Tab[]).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTab(t)}
+              style={{
+                padding: '12px 0',
+                background: 'transparent',
+                border: 'none',
+                borderBottom: tab === t ? '2px solid var(--ink)' : '2px solid transparent',
+                color: tab === t ? 'var(--ink)' : 'var(--ink-3)',
+                fontSize: 14,
+                fontWeight: tab === t ? 600 : 400,
+                cursor: 'pointer',
+                textTransform: 'capitalize',
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <div className="mt-8">
+          {tab === 'details' && (
+            <dl
+              className="grid grid-cols-[auto_1fr] gap-y-3 gap-x-10"
+              style={{ fontSize: 13.5, maxWidth: 560 }}
+            >
+              <dt style={{ color: 'var(--ink-3)' }}>Vendor</dt>
+              <dd style={{ color: 'var(--ink)' }}>{vendor}</dd>
+              <dt style={{ color: 'var(--ink-3)' }}>Category</dt>
+              <dd style={{ color: 'var(--ink)' }}>{product.category}</dd>
+              {product.tags && product.tags.length > 0 && (
+                <>
+                  <dt style={{ color: 'var(--ink-3)' }}>Tags</dt>
+                  <dd style={{ color: 'var(--ink)' }}>{product.tags.join(', ')}</dd>
+                </>
+              )}
+              <dt style={{ color: 'var(--ink-3)' }}>Availability</dt>
+              <dd style={{ color: 'var(--ink)' }}>
+                {stockStatus === 'out'
+                  ? 'Sold out'
+                  : `In stock${activeVariant ? ` · ${activeVariant.stock} left` : ''}`}
+              </dd>
+            </dl>
+          )}
+          {tab === 'reviews' && (
+            <div
+              className="grid gap-10"
+              style={{ gridTemplateColumns: 'minmax(0, 1.3fr) minmax(0, 1fr)' }}
+            >
+              <div className="flex flex-col gap-4">
+                {totalReviews === 0 ? (
+                  <Card padding={20}>
+                    <p style={{ color: 'var(--ink-3)', fontSize: 14 }}>
+                      No reviews yet — be the first verified purchaser to share thoughts.
+                    </p>
+                  </Card>
+                ) : (
+                  <>
+                    {reviews.map((r) => (
+                      <Card key={r.id} padding={20}>
+                        <div className="flex items-center justify-between">
+                          <div style={{ fontSize: 14, fontWeight: 500 }}>{r.user?.name}</div>
+                          <div className="inline-flex items-center gap-0.5">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <I.star_f
+                                key={i}
+                                size={12}
+                                style={{
+                                  color: i < r.rating ? 'var(--sand)' : 'var(--line-2)',
+                                }}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        {r.comment && (
+                          <p style={{ marginTop: 8, fontSize: 14, color: 'var(--ink-2)', lineHeight: 1.6 }}>
+                            {r.comment}
+                          </p>
+                        )}
+                      </Card>
+                    ))}
+                    {reviewsPage < reviewsTotalPages && (
+                      <div className="flex justify-center" style={{ paddingTop: 4 }}>
+                        <Button
+                          variant="secondary"
+                          onClick={loadMoreReviews}
+                          disabled={loadingMoreReviews}
+                        >
+                          {loadingMoreReviews
+                            ? 'Loading…'
+                            : `Load more reviews (${totalReviews - reviews.length} left)`}
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
+              {eligibility?.canReview ? (
+                <Card padding={20} style={{ alignSelf: 'start' }}>
+                  <span
+                    className="inline-flex items-center gap-1.5"
+                    style={{
+                      padding: '3px 10px',
+                      borderRadius: 999,
+                      fontSize: 11.5,
+                      fontWeight: 500,
+                      background: 'var(--sage-soft, #E6EDE2)',
+                      color: 'var(--sage-2, #56745A)',
+                      marginBottom: 10,
+                    }}
+                  >
+                    <I.check size={11} /> You’re a verified purchaser
+                  </span>
+                  <div style={{ fontFamily: 'var(--serif)', fontSize: 20, color: 'var(--ink)', marginBottom: 4 }}>
+                    Write a review
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--ink-3)', marginBottom: 12 }}>
+                    Share what stood out to you.
+                  </div>
+                  <div
+                    className="inline-flex items-center gap-2 flex-wrap"
+                    style={{ marginBottom: 12 }}
+                    onMouseLeave={() => setReviewHover(0)}
+                  >
+                    <div className="inline-flex items-center gap-1">
+                      {Array.from({ length: 5 }).map((_, i) => {
+                        const idx = i + 1;
+                        const selected = idx <= reviewRating;
+                        const previewing = reviewHover > 0 && idx <= reviewHover;
+                        const filled = previewing || (reviewHover === 0 && selected);
+                        return (
+                          <button
+                            key={i}
+                            type="button"
+                            onClick={() =>
+                              setReviewRating((prev) => (prev === idx ? 0 : idx))
+                            }
+                            onMouseEnter={() => setReviewHover(idx)}
+                            aria-label={`${idx} star${idx > 1 ? 's' : ''}`}
+                            aria-pressed={selected}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              padding: 2,
+                              cursor: 'pointer',
+                              transition: 'transform 120ms ease',
+                              transform: previewing ? 'scale(1.08)' : 'scale(1)',
+                            }}
+                          >
+                            {filled ? (
+                              <I.star_f
+                                size={28}
+                                style={{ color: 'var(--terracotta)' }}
+                              />
+                            ) : (
+                              <I.star
+                                size={28}
+                                stroke={1.75}
+                                style={{
+                                  color: selected ? 'var(--terracotta)' : 'var(--line-2)',
+                                }}
+                              />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <span style={{ fontSize: 12.5, color: 'var(--ink-3)', minWidth: 48 }}>
+                      {(reviewHover || reviewRating)
+                        ? `${reviewHover || reviewRating}/5`
+                        : 'Tap to rate'}
+                    </span>
+                  </div>
+                  <textarea
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    onFocus={() => setReviewCommentFocused(true)}
+                    onBlur={() => setReviewCommentFocused(false)}
+                    placeholder="What stood out? (optional)"
+                    rows={4}
+                    maxLength={1000}
+                    style={{
+                      width: '100%',
+                      padding: 12,
+                      border: `1px solid ${reviewCommentFocused ? 'var(--terracotta)' : 'var(--line)'}`,
+                      borderRadius: 8,
+                      fontSize: 14,
+                      fontFamily: 'inherit',
+                      resize: 'vertical',
+                      background: 'var(--bg)',
+                      color: 'var(--ink)',
+                      outline: 'none',
+                      boxShadow: reviewCommentFocused
+                        ? '0 0 0 3px color-mix(in srgb, var(--terracotta) 18%, transparent)'
+                        : 'none',
+                      transition: 'border-color 120ms ease, box-shadow 120ms ease',
+                    }}
+                  />
+                  <div className="flex justify-end mt-3">
+                    <Button onClick={submitReview} disabled={reviewRating === 0 || submittingReview}>
+                      {submittingReview ? 'Submitting…' : 'Submit review'}
+                    </Button>
+                  </div>
+                </Card>
+              ) : (
+                (() => {
+                  const state = !user
+                    ? {
+                        icon: <I.lock size={20} />,
+                        title: 'Reviews are for verified purchasers',
+                        body: 'Sign in to your Nexus account to leave a review on items you’ve received.',
+                        cta: { href: '/login', label: 'Sign in' },
+                      }
+                    : eligibility?.reason === 'already_reviewed'
+                      ? {
+                          icon: <I.check size={20} />,
+                          title: 'You’ve reviewed this',
+                          body: 'Thanks for sharing your thoughts — your review is live below.',
+                          cta: null,
+                        }
+                      : {
+                          icon: <I.bag size={20} />,
+                          title: 'Only verified purchasers can review',
+                          body: 'Once your order is delivered, you’ll be able to share what you thought right here.',
+                          cta: { href: '/shop', label: 'Browse shop' },
+                        };
+                  return (
+                    <Card padding={24} style={{ alignSelf: 'start', textAlign: 'center' }}>
+                      <div
+                        style={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: 999,
+                          background: 'var(--bg-muted)',
+                          color: 'var(--terracotta-2)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          marginBottom: 12,
+                        }}
+                      >
+                        {state.icon}
+                      </div>
+                      <div
+                        style={{
+                          fontFamily: 'var(--serif)',
+                          fontSize: 20,
+                          color: 'var(--ink)',
+                          marginBottom: 6,
+                        }}
+                      >
+                        {state.title}
+                      </div>
+                      <p
+                        style={{
+                          fontSize: 13.5,
+                          color: 'var(--ink-3)',
+                          lineHeight: 1.6,
+                          marginBottom: state.cta ? 16 : 0,
+                          maxWidth: 320,
+                          marginLeft: 'auto',
+                          marginRight: 'auto',
+                        }}
+                      >
+                        {state.body}
+                      </p>
+                      {state.cta && (
+                        <Link
+                          href={state.cta.href}
+                          style={{
+                            display: 'inline-block',
+                            padding: '10px 20px',
+                            borderRadius: 999,
+                            background: 'var(--ink)',
+                            color: 'var(--bg)',
+                            fontSize: 13,
+                            fontWeight: 500,
+                            textDecoration: 'none',
+                          }}
+                        >
+                          {state.cta.label}
+                        </Link>
+                      )}
+                    </Card>
+                  );
+                })()
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {related.length > 0 && (
+        <div className="mt-20">
+          <h2
+            style={{
+              fontFamily: 'var(--serif)',
+              fontSize: 28,
+              color: 'var(--ink)',
+              marginBottom: 20,
+            }}
+          >
+            You may also like
+          </h2>
+          <div
+            className="grid gap-5"
+            style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))' }}
+          >
+            {related.map((p) => (
+              <ProductCard key={p.id} product={p} />
             ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
-  )
+  );
 }

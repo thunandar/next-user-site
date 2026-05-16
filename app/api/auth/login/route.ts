@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-
-const API_URL = process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
-const REFRESH_COOKIE_MAX_AGE = 30 * 24 * 60 * 60
+import { API_URL, REFRESH_COOKIE_NAME, refreshCookieOptions } from '@/lib/server-config'
 
 export async function POST(req: NextRequest) {
   let body: unknown
@@ -35,13 +33,7 @@ export async function POST(req: NextRequest) {
   })
 
   if (refreshToken) {
-    response.cookies.set('refresh_token', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: REFRESH_COOKIE_MAX_AGE,
-      path: '/',
-    })
+    response.cookies.set(REFRESH_COOKIE_NAME, refreshToken, refreshCookieOptions)
   }
 
   return response
