@@ -17,9 +17,10 @@ export default function Pagination({ pagination, onPageChange }: PaginationProps
   )
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+    <nav aria-label="Pagination" className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
       <p className="text-sm text-gray-500">
-        Showing <span className="font-medium text-gray-700">{from}–{to}</span> of{' '}
+        Showing <span className="font-medium text-gray-700">{from}</span> to{' '}
+        <span className="font-medium text-gray-700">{to}</span> of{' '}
         <span className="font-medium text-gray-700">{totalItems}</span> results
       </p>
 
@@ -27,6 +28,7 @@ export default function Pagination({ pagination, onPageChange }: PaginationProps
         <button
           onClick={() => onPageChange(currentPage - 1)}
           disabled={!pagination.hasPrevPage}
+          aria-label="Go to previous page"
           className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-gray-600"
         >
           <ChevronLeft size={16} />
@@ -36,9 +38,11 @@ export default function Pagination({ pagination, onPageChange }: PaginationProps
           const prev = pages[i - 1]
           return (
             <span key={p} className="flex items-center gap-1">
-              {prev && p - prev > 1 && <span className="px-1 text-gray-400 text-sm">…</span>}
+              {prev !== undefined && p - prev > 1 && <span className="px-1 text-gray-400 text-sm">…</span>}
               <button
                 onClick={() => onPageChange(p)}
+                aria-label={`Go to page ${p}`}
+                aria-current={p === currentPage ? 'page' : undefined}
                 className={cn(
                   'w-8 h-8 text-sm font-medium rounded-lg transition-colors',
                   p === currentPage
@@ -55,11 +59,12 @@ export default function Pagination({ pagination, onPageChange }: PaginationProps
         <button
           onClick={() => onPageChange(currentPage + 1)}
           disabled={!pagination.hasNextPage}
+          aria-label="Go to next page"
           className="p-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed text-gray-600"
         >
           <ChevronRight size={16} />
         </button>
       </div>
-    </div>
+    </nav>
   )
 }

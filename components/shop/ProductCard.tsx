@@ -1,123 +1,175 @@
-'use client'
+'use client';
 
-import Link from 'next/link'
-import Image from 'next/image'
-import { Heart, ShoppingCart, Star } from 'lucide-react'
-import { useCart } from '@/context/CartContext'
-import { useWishlist } from '@/context/WishlistContext'
-import { useAuth } from '@/context/AuthContext'
-import { formatCurrency, getPrimaryImage, getStockStatus } from '@/lib/utils'
-import type { Product } from '@/types'
-import toast from 'react-hot-toast'
+import Link from 'next/link';
+import Image from 'next/image';
+import toast from 'react-hot-toast';
+import { useCart } from '@/context/CartContext';
+import { useWishlist } from '@/context/WishlistContext';
+import { useAuth } from '@/context/AuthContext';
+import { formatCurrency, getPrimaryImage, getStockStatus } from '@/lib/utils';
+import PlaceholderImg from '@/components/ui/PlaceholderImg';
+import { I } from '@/components/ui/Icons';
+import type { Product } from '@/types';
 
 interface Props {
-  product: Product
-  avgRating?: number | null
+  product: Product;
+  avgRating?: number | null;
 }
 
 export default function ProductCard({ product, avgRating }: Props) {
-  const { addToCart } = useCart()
-  const { toggle, isInWishlist } = useWishlist()
-  const { user } = useAuth()
-  const primaryImage = getPrimaryImage(product.ProductImages)
-  const stockStatus = getStockStatus(product.stock)
-  const inWishlist = isInWishlist(product.id)
+  const { addToCart } = useCart();
+  const { toggle, isInWishlist } = useWishlist();
+  const { user } = useAuth();
+  const primaryImage = getPrimaryImage(product.ProductImages);
+  const stockStatus = getStockStatus(product.stock);
+  const inWishlist = isInWishlist(product.id);
+  const hasImage = primaryImage && primaryImage !== '/placeholder.png';
 
   const handleAddToCart = (e: React.MouseEvent) => {
-    e.preventDefault()
-    if (stockStatus === 'out') return
-    addToCart(product)
-    toast.success(`${product.name} added to cart`)
-  }
+    e.preventDefault();
+    if (stockStatus === 'out') return;
+    addToCart(product);
+    toast.success(`${product.name} added to cart`);
+  };
 
   const handleWishlist = async (e: React.MouseEvent) => {
-    e.preventDefault()
-    if (!user) { toast.error('Please login to save items'); return }
-    await toggle(product.id)
-    toast.success(inWishlist ? 'Removed from wishlist' : 'Added to wishlist')
-  }
+    e.preventDefault();
+    if (!user) {
+      toast.error('Sign in to save items');
+      return;
+    }
+    await toggle(product.id);
+    toast.success(inWishlist ? 'Removed from wishlist' : 'Saved');
+  };
+
+  const tags = (product as { tags?: string[] }).tags ?? [];
 
   return (
     <Link
       href={`/shop/products/${product.id}`}
-      className="group bg-white rounded-2xl overflow-hidden flex flex-col shadow-sm hover:shadow-xl transition-all duration-300 border border-gray-100 hover:border-gray-200 hover:-translate-y-0.5"
+      className="group flex flex-col overflow-hidden transition-all"
+      style={{
+        background: 'var(--bg-elev)',
+        border: '1px solid var(--line)',
+        borderRadius: 16,
+        textDecoration: 'none',
+        color: 'var(--ink)',
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLAnchorElement).style.borderColor = 'var(--line-strong)';
+        (e.currentTarget as HTMLAnchorElement).style.boxShadow = 'var(--shadow-2)';
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLAnchorElement).style.borderColor = 'var(--line)';
+        (e.currentTarget as HTMLAnchorElement).style.boxShadow = 'none';
+      }}
     >
-      {/* Image */}
-      <div className="relative aspect-square bg-gray-50 overflow-hidden">
-        <Image
-          src={primaryImage}
-          alt={product.name}
-          fill
-          className={`object-cover transition-transform duration-500 group-hover:scale-105 ${stockStatus === 'out' ? 'opacity-50 grayscale' : ''}`}
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-        />
+      <div className="relative" style={{ aspectRatio: '1/1', overflow: 'hidden' }}>
+        {hasImage ? (
+          <Image
+            src={primaryImage}
+            alt={product.name}
+            fill
+            className="object-cover transition-transform duration-500 group-hover:scale-105"
+            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+          />
+        ) : (
+          <PlaceholderImg label={product.name} h="100%" w="100%" style={{ borderRadius: 0 }} />
+        )}
 
-        {/* Out of stock */}
         {stockStatus === 'out' && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="bg-gray-900/80 backdrop-blur-sm text-white text-xs font-semibold px-3 py-1.5 rounded-full tracking-wide">
-              Out of Stock
+          <div className="absolute inset-0 flex items-center justify-center" style={{ background: 'rgba(22,20,15,0.35)' }}>
+            <span
+              className="text-xs font-medium px-3 py-1.5 rounded-full"
+              style={{ background: 'var(--ink)', color: 'var(--bg-elev)' }}
+            >
+              Out of stock
             </span>
           </div>
         )}
 
-        {/* Low stock */}
-        {stockStatus === 'low' && (
+        {tags[0] && stockStatus !== 'out' && (
           <div className="absolute top-2.5 left-2.5">
-            <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">
-              Only {product.stock} left
+            <span
+              className="text-[10px] font-semibold uppercase rounded-full"
+              style={{
+                padding: '4px 10px',
+                letterSpacing: 0.04,
+                background: 'var(--bg-elev)',
+                color: 'var(--ink-2)',
+                border: '1px solid var(--line-2)',
+              }}
+            >
+              {tags[0]}
             </span>
           </div>
         )}
 
-        {/* Wishlist */}
         <button
+          type="button"
           onClick={handleWishlist}
-          className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-md border transition-all duration-200 ${
-            inWishlist
-              ? 'bg-rose-500 border-rose-500 text-white scale-110'
-              : 'bg-white/90 border-white text-gray-400 hover:text-rose-500 hover:scale-110'
-          }`}
+          aria-label={inWishlist ? `Remove ${product.name} from wishlist` : `Save ${product.name}`}
+          className="absolute top-2.5 right-2.5 rounded-full flex items-center justify-center transition-all"
+          style={{
+            width: 34,
+            height: 34,
+            background: inWishlist ? 'var(--terracotta)' : 'rgba(255,255,255,0.92)',
+            color: inWishlist ? '#fff' : 'var(--ink-2)',
+            border: '1px solid var(--line)',
+            cursor: 'pointer',
+          }}
         >
-          <Heart size={14} fill={inWishlist ? 'currentColor' : 'none'} />
+          {inWishlist ? <I.heart_f size={15} /> : <I.heart size={15} />}
         </button>
       </div>
 
-      {/* Info */}
-      <div className="p-4 flex flex-col gap-2 flex-1">
-        {product.category && (
-          <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">
-            {product.category}
-          </span>
-        )}
-
-        <h3 className="text-sm font-semibold text-gray-800 leading-snug line-clamp-2 group-hover:text-blue-600 transition-colors">
+      <div className="flex flex-col gap-1" style={{ padding: 16 }}>
+        <span className="t-micro" style={{ color: 'var(--ink-3)' }}>
+          {(product as { vendor?: string | null }).vendor ?? product.category ?? 'Nexus'}
+        </span>
+        <h3
+          style={{
+            fontFamily: 'var(--serif)',
+            fontSize: 19,
+            lineHeight: 1.15,
+            color: 'var(--ink)',
+          }}
+        >
           {product.name}
         </h3>
-
-        {avgRating != null && avgRating > 0 && (
-          <div className="flex items-center gap-1">
-            <Star size={11} className="text-amber-400 fill-amber-400" />
-            <span className="text-xs text-gray-500 font-medium">{avgRating.toFixed(1)}</span>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between mt-auto pt-1">
-          <span className="text-base font-bold text-gray-900">{formatCurrency(product.price)}</span>
-          <button
-            onClick={handleAddToCart}
-            disabled={stockStatus === 'out'}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all duration-150 ${
-              stockStatus === 'out'
-                ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
-                : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95'
-            }`}
-          >
-            <ShoppingCart size={13} />
-            <span className="hidden sm:inline">Add</span>
-          </button>
+        <div className="flex items-center justify-between mt-2">
+          <span style={{ fontSize: 14.5, fontWeight: 500, color: 'var(--ink)' }}>
+            {formatCurrency(product.price)}
+          </span>
+          {avgRating != null && avgRating > 0 && (
+            <span className="inline-flex items-center gap-1" style={{ fontSize: 12, color: 'var(--ink-3)' }}>
+              <I.star_f size={12} style={{ color: 'var(--sand)' }} />
+              {avgRating.toFixed(1)}
+            </span>
+          )}
         </div>
+        <button
+          type="button"
+          onClick={handleAddToCart}
+          disabled={stockStatus === 'out'}
+          className="mt-3 flex items-center justify-center gap-2 transition-colors"
+          style={{
+            width: '100%',
+            height: 36,
+            padding: '0 14px',
+            background: stockStatus === 'out' ? 'var(--bg-muted)' : 'var(--ink)',
+            color: stockStatus === 'out' ? 'var(--ink-4)' : 'var(--bg-elev)',
+            border: 'none',
+            borderRadius: 999,
+            fontSize: 13,
+            fontWeight: 500,
+            cursor: stockStatus === 'out' ? 'not-allowed' : 'pointer',
+          }}
+        >
+          <I.cart size={14} />
+          {stockStatus === 'out' ? 'Sold out' : 'Add to cart'}
+        </button>
       </div>
     </Link>
-  )
+  );
 }

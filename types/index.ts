@@ -2,7 +2,14 @@ export interface User {
   id: number
   email: string
   name: string
-  role: 'admin' | 'user'
+  role: 'super_admin' | 'admin' | 'user'
+  status?: 'active' | 'banned'
+  lifetimeSpend?: string | number
+  avatarUrl?: string | null
+  displayName?: string | null
+  timezone?: string | null
+  twoFactorEnabled?: boolean
+  loginAlerts?: boolean
   createdAt: string
   updatedAt: string
 }
@@ -16,6 +23,19 @@ export interface ProductImage {
   sortOrder: number
 }
 
+export interface ProductVariant {
+  id: number
+  productId: number
+  name: string
+  sku?: string | null
+  size?: string | null
+  color?: string | null
+  colorHex?: string | null
+  priceOverride?: string | null
+  stock: number
+  sortOrder: number
+}
+
 export interface Product {
   id: number
   name: string
@@ -24,6 +44,11 @@ export interface Product {
   stock: number
   category: string | null
   ProductImages: ProductImage[]
+  tags?: string[]
+  vendor?: string | null
+  salesCount?: number
+  status?: 'active' | 'draft' | 'out' | 'archived'
+  variants?: ProductVariant[]
   createdAt: string
   updatedAt: string
 }
@@ -65,9 +90,18 @@ export interface ProductFilters {
   category?: string
   minPrice?: number
   maxPrice?: number
-  inStock?: boolean
+  inStock?: boolean | string
+  onSale?: boolean | string
+  isNew?: boolean | string
+  minRating?: number
+  color?: string
+  size?: string
   sortBy?: string
   sortOrder?: 'ASC' | 'DESC'
+  status?: string
+  tags?: string
+  vendor?: string
+  search?: string
 }
 
 export interface CreateProductData {
@@ -123,6 +157,17 @@ export interface Order {
   notes: string | null
   items: OrderItem[]
   user?: { id: number; name: string; email: string }
+  address?: {
+    id: number
+    name: string
+    line1: string
+    line2?: string | null
+    city: string
+    region?: string | null
+    postal: string
+    country: string
+    phone?: string | null
+  } | null
   createdAt: string
   updatedAt: string
 }
@@ -141,8 +186,11 @@ export interface CartItem {
 }
 
 export interface CreateOrderData {
-  items: { productId: number; quantity: number }[]
+  items: { productId: number; quantity: number; variantId?: number }[]
   shippingAddress?: string
+  shippingAddressId?: number
+  shippingMethod?: 'standard' | 'express' | 'overnight'
+  couponCode?: string
   notes?: string
 }
 

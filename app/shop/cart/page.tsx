@@ -1,87 +1,318 @@
-'use client'
+'use client';
 
-import Link from 'next/link'
-import Image from 'next/image'
-import { Minus, Plus, Trash2, ShoppingCart, ArrowRight } from 'lucide-react'
-import { useCart } from '@/context/CartContext'
-import { formatCurrency, getPrimaryImage } from '@/lib/utils'
+import Link from 'next/link';
+import Image from 'next/image';
+import { useCart } from '@/context/CartContext';
+import { formatCurrency, getPrimaryImage } from '@/lib/utils';
+import {
+  FREE_SHIPPING_THRESHOLD,
+  SHIPPING_RATES,
+  calcTax,
+  qualifiesForFreeShipping,
+} from '@/lib/commerce';
+import Card from '@/components/ui/Card';
+import Button from '@/components/ui/Button';
+import PlaceholderImg from '@/components/ui/PlaceholderImg';
+import { I } from '@/components/ui/Icons';
 
 export default function CartPage() {
-  const { items, removeFromCart, updateQuantity, totalItems, totalPrice } = useCart()
+  const { items, removeFromCart, updateQuantity, totalItems, totalPrice } = useCart();
 
   if (items.length === 0) {
     return (
-      <div className="text-center py-24 space-y-4">
-        <ShoppingCart size={48} className="mx-auto text-gray-300" />
-        <h2 className="text-xl font-semibold text-gray-700">Your cart is empty</h2>
-        <Link href="/shop/products" className="inline-flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium">
-          Continue Shopping <ArrowRight size={16} />
-        </Link>
+      <div style={{ maxWidth: 1280, margin: '0 auto', padding: '80px 24px' }}>
+        <Card padding={48} style={{ textAlign: 'center' }}>
+          <I.bag size={44} style={{ color: 'var(--ink-4)', margin: '0 auto' }} />
+          <h2
+            style={{
+              fontFamily: 'var(--serif)',
+              fontSize: 32,
+              color: 'var(--ink)',
+              marginTop: 16,
+            }}
+          >
+            Your cart is empty
+          </h2>
+          <p style={{ color: 'var(--ink-3)', marginTop: 8 }}>
+            A short list of quiet things is waiting for you.
+          </p>
+          <Link href="/shop/products">
+            <Button variant="primary" size="lg" icon={<I.arr_r />} style={{ marginTop: 24 }}>
+              Start the edit
+            </Button>
+          </Link>
+        </Card>
       </div>
-    )
+    );
   }
 
-  return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Shopping Cart ({totalItems} items)</h1>
+  const remaining = Math.max(0, FREE_SHIPPING_THRESHOLD - totalPrice);
+  const progress = Math.min(100, (totalPrice / FREE_SHIPPING_THRESHOLD) * 100);
+  const isFreeShipping = qualifiesForFreeShipping(totalPrice);
+  const previewShipping = isFreeShipping ? 0 : SHIPPING_RATES.express;
+  const previewTax = calcTax(totalPrice);
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
-          {items.map(({ product, quantity }) => (
-            <div key={product.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex gap-4">
-              <div className="w-20 h-20 rounded-xl overflow-hidden bg-gray-100 flex-shrink-0">
-                <Image src={getPrimaryImage(product.ProductImages)} alt={product.name} width={80} height={80} className="w-full h-full object-cover" />
+  return (
+    <div style={{ maxWidth: 1280, margin: '0 auto', padding: '40px 24px 80px' }}>
+      <div
+        className="grid gap-10"
+        style={{ gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 1fr)' }}
+      >
+        <div>
+          <h1 className="t-h1">
+            Your cart{' '}
+            <span style={{ fontStyle: 'italic', color: 'var(--ink-3)' }}>
+              {totalItems} {totalItems === 1 ? 'item' : 'items'}
+            </span>
+          </h1>
+
+          {remaining > 0 && (
+            <Card
+              padding={16}
+              style={{
+                marginTop: 16,
+                background: 'var(--sage-tint)',
+                borderColor: 'var(--sage-tint)',
+              }}
+            >
+              <div
+                className="flex items-center gap-2"
+                style={{ color: 'var(--sage-2)', fontSize: 13 }}
+              >
+                <I.spark size={16} /> You&apos;re {formatCurrency(remaining)} away from free express shipping.
               </div>
-              <div className="flex-1 min-w-0">
-                <Link href={`/shop/products/${product.id}`} className="font-medium text-gray-900 hover:text-blue-600 truncate block">
-                  {product.name}
-                </Link>
-                {product.category && <p className="text-xs text-gray-400 mt-0.5">{product.category}</p>}
-                <p className="text-blue-600 font-bold mt-1">{formatCurrency(product.price)}</p>
+              <div
+                style={{
+                  height: 6,
+                  borderRadius: 999,
+                  background: 'rgba(255,255,255,0.5)',
+                  marginTop: 10,
+                  overflow: 'hidden',
+                }}
+              >
+                <div
+                  style={{
+                    height: '100%',
+                    width: `${progress}%`,
+                    background: 'var(--sage)',
+                    transition: 'width 0.3s ease',
+                  }}
+                />
               </div>
-              <div className="flex flex-col items-end gap-3">
-                <button onClick={() => removeFromCart(product.id)} className="text-gray-300 hover:text-red-500 transition-colors">
-                  <Trash2 size={16} />
-                </button>
-                <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
-                  <button onClick={() => updateQuantity(product.id, quantity - 1)} className="px-2 py-1 hover:bg-gray-50">
-                    <Minus size={14} />
-                  </button>
-                  <span className="px-3 py-1 text-sm font-medium">{quantity}</span>
-                  <button onClick={() => updateQuantity(product.id, Math.min(product.stock, quantity + 1))} className="px-2 py-1 hover:bg-gray-50">
-                    <Plus size={14} />
-                  </button>
+            </Card>
+          )}
+
+          <div className="mt-6 flex flex-col">
+            {items.map(({ product, quantity }, i) => {
+              const primary = getPrimaryImage(product.ProductImages || []);
+              const hasImage = primary && primary !== '/placeholder.png';
+              return (
+                <div
+                  key={product.id}
+                  className="flex items-start gap-5"
+                  style={{
+                    padding: '20px 0',
+                    borderTop: i === 0 ? '1px solid var(--line)' : 'none',
+                    borderBottom: '1px solid var(--line)',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 120,
+                      height: 140,
+                      borderRadius: 12,
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                      position: 'relative',
+                      background: 'var(--bg-muted)',
+                    }}
+                  >
+                    {hasImage ? (
+                      <Image src={primary} alt={product.name} fill style={{ objectFit: 'cover' }} />
+                    ) : (
+                      <PlaceholderImg label={product.name} h="100%" w="100%" />
+                    )}
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="t-micro" style={{ color: 'var(--ink-3)' }}>
+                      {product.vendor ?? product.category ?? 'Nexus'}
+                    </div>
+                    <Link
+                      href={`/shop/products/${product.id}`}
+                      style={{
+                        fontFamily: 'var(--serif)',
+                        fontSize: 22,
+                        color: 'var(--ink)',
+                        textDecoration: 'none',
+                        display: 'block',
+                        marginTop: 4,
+                      }}
+                    >
+                      {product.name}
+                    </Link>
+                    <div style={{ fontSize: 14, color: 'var(--ink-2)', marginTop: 6 }}>
+                      {formatCurrency(product.price)}
+                    </div>
+
+                    <div className="flex items-center gap-4 mt-4">
+                      <div
+                        className="flex items-center"
+                        style={{
+                          border: '1px solid var(--line-2)',
+                          borderRadius: 999,
+                          background: 'var(--bg-elev)',
+                          height: 34,
+                          padding: '0 4px',
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(product.id, quantity - 1)}
+                          style={{
+                            width: 26,
+                            height: 26,
+                            borderRadius: 999,
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--ink-2)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <I.minus size={12} />
+                        </button>
+                        <span
+                          style={{
+                            minWidth: 24,
+                            textAlign: 'center',
+                            fontSize: 13,
+                            color: 'var(--ink)',
+                          }}
+                        >
+                          {quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(product.id, quantity + 1)}
+                          style={{
+                            width: 26,
+                            height: 26,
+                            borderRadius: 999,
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--ink-2)',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <I.plus size={12} />
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => removeFromCart(product.id)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          color: 'var(--ink-3)',
+                          fontSize: 13,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      fontFamily: 'var(--serif)',
+                      fontSize: 20,
+                      color: 'var(--ink)',
+                    }}
+                  >
+                    {formatCurrency(Number(product.price) * quantity)}
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
+              );
+            })}
+          </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 h-fit space-y-4">
-          <h3 className="font-semibold text-gray-900">Order Summary</h3>
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between text-gray-600">
-              <span>Subtotal ({totalItems} items)</span>
+        <aside>
+          <Card
+            padding={24}
+            style={{ position: 'sticky', top: 120, display: 'flex', flexDirection: 'column', gap: 14 }}
+          >
+            <div className="t-h4">Order summary</div>
+            <div className="flex items-center justify-between" style={{ fontSize: 14 }}>
+              <span style={{ color: 'var(--ink-3)' }}>Subtotal</span>
               <span>{formatCurrency(totalPrice)}</span>
             </div>
-            <div className="flex justify-between text-gray-600">
-              <span>Shipping</span>
-              <span className="text-green-600">Free</span>
+            <div className="flex items-center justify-between" style={{ fontSize: 14 }}>
+              <span style={{ color: 'var(--ink-3)' }}>Shipping</span>
+              <span style={{ color: remaining > 0 ? 'var(--ink)' : 'var(--success)' }}>
+                {remaining > 0 ? 'Calculated at checkout' : 'Free'}
+              </span>
             </div>
-          </div>
-          <div className="border-t border-gray-100 pt-3 flex justify-between font-bold text-gray-900">
-            <span>Total</span>
-            <span className="text-blue-600 text-lg">{formatCurrency(totalPrice)}</span>
-          </div>
-          <Link href="/shop/checkout"
-            className="w-full flex items-center justify-center gap-2 bg-blue-600 text-white py-3 rounded-xl font-medium hover:bg-blue-700 transition-colors">
-            Checkout <ArrowRight size={16} />
-          </Link>
-          <Link href="/shop/products" className="block text-center text-sm text-gray-500 hover:text-gray-700">
-            Continue Shopping
-          </Link>
-        </div>
+            <div className="flex items-center justify-between" style={{ fontSize: 14 }}>
+              <span style={{ color: 'var(--ink-3)' }}>Estimated tax</span>
+              <span>{formatCurrency(previewTax)}</span>
+            </div>
+            <div
+              style={{
+                borderTop: '1px solid var(--line)',
+                paddingTop: 14,
+                display: 'flex',
+                alignItems: 'baseline',
+                justifyContent: 'space-between',
+              }}
+            >
+              <span style={{ fontFamily: 'var(--serif)', fontSize: 22 }}>Total</span>
+              <span style={{ fontFamily: 'var(--serif)', fontSize: 32 }}>
+                {formatCurrency(totalPrice + previewTax + previewShipping)}
+              </span>
+            </div>
+
+            <form
+              className="flex gap-2"
+              onSubmit={(e) => e.preventDefault()}
+              style={{ marginTop: 4 }}
+            >
+              <input
+                placeholder="Promo code"
+                style={{
+                  flex: 1,
+                  height: 40,
+                  padding: '0 12px',
+                  borderRadius: 10,
+                  border: '1px solid var(--line-2)',
+                  background: 'var(--bg-elev)',
+                  fontSize: 13,
+                  color: 'var(--ink)',
+                  outline: 'none',
+                }}
+              />
+              <Button variant="secondary" size="md">
+                Apply
+              </Button>
+            </form>
+
+            <Link href="/shop/checkout" style={{ textDecoration: 'none' }}>
+              <Button variant="primary" size="lg" full icon={<I.lock />}>
+                Continue to checkout
+              </Button>
+            </Link>
+
+            <div
+              className="flex items-center gap-2"
+              style={{ fontSize: 12, color: 'var(--ink-3)' }}
+            >
+              <I.refund size={14} /> Free returns within 60 days
+            </div>
+          </Card>
+        </aside>
       </div>
     </div>
-  )
+  );
 }

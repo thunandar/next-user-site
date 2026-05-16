@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-// These shop routes require login
 const AUTH_REQUIRED = ['/shop/cart', '/shop/checkout', '/shop/orders', '/shop/wishlist']
 const PUBLIC_PATHS = ['/login', '/register']
 
@@ -12,16 +11,12 @@ export function proxy(request: NextRequest) {
   const isPublic = PUBLIC_PATHS.includes(pathname)
   const requiresAuth = AUTH_REQUIRED.some(p => pathname.startsWith(p))
 
-  // Logged-in user hits login/register → go to shop
   if (token && isPublic) {
     return NextResponse.redirect(new URL('/shop', request.url))
   }
-
-  // Unauthenticated user hits a protected shop route → login
   if (!token && requiresAuth) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
-
   return NextResponse.next()
 }
 

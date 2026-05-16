@@ -27,7 +27,8 @@ export function getImageUrl(imageUrl: string | undefined): string {
 
 export function getPrimaryImage(images: { imageUrl: string; isPrimary: boolean }[]): string {
   if (!images || images.length === 0) return '/placeholder.png'
-  const primary = images.find((img) => img.isPrimary) || images[0]
+  const primary = images.find((img) => img.isPrimary) ?? images[0]
+  if (!primary) return '/placeholder.png'
   return getImageUrl(primary.imageUrl)
 }
 

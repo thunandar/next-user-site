@@ -1,37 +1,46 @@
 import type { Metadata } from 'next'
-import { Geist } from 'next/font/google'
+import { GeistSans } from 'geist/font/sans'
 import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from '@/context/AuthContext'
 import { CartProvider } from '@/context/CartContext'
 import { WishlistProvider } from '@/context/WishlistContext'
+import GoogleProvider from '@/components/auth/GoogleProvider'
+import '@fontsource/instrument-serif/400.css'
+import '@fontsource/instrument-serif/400-italic.css'
 import './globals.css'
 
-const geist = Geist({ subsets: ['latin'], variable: '--font-geist' })
-
 export const metadata: Metadata = {
-  title: { default: 'ProductHub', template: '%s | ProductHub' },
+  title: { default: 'Nexus', template: '%s | Nexus' },
   description: 'Shop the best products online',
   icons: { icon: '/icon.svg' },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={geist.variable}>
-      <body className="font-[--font-geist] antialiased">
-        <AuthProvider>
-          <CartProvider>
-            <WishlistProvider>
+    <html lang="en" className={GeistSans.variable}>
+      <body className="antialiased">
+        <GoogleProvider>
+          <AuthProvider>
+            <CartProvider>
+              <WishlistProvider>
               {children}
               <Toaster
                 position="top-right"
                 toastOptions={{
                   duration: 3500,
-                  style: { borderRadius: '10px', fontSize: '14px' },
+                  style: {
+                    background: 'var(--bg-elev)',
+                    color: 'var(--ink)',
+                    border: '1px solid var(--line)',
+                    borderRadius: '10px',
+                    fontSize: '14px',
+                  },
                 }}
               />
-            </WishlistProvider>
-          </CartProvider>
-        </AuthProvider>
+              </WishlistProvider>
+            </CartProvider>
+          </AuthProvider>
+        </GoogleProvider>
       </body>
     </html>
   )

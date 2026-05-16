@@ -4,13 +4,14 @@ test('my orders page loads', async ({ page }) => {
   await page.goto('/shop/orders')
   await page.waitForLoadState('networkidle')
   const isEmpty = await page.getByText(/no orders yet/i).isVisible()
-  const hasOrders = await page.getByText(/my orders/i).isVisible()
+  const hasOrders = await page.getByText(/order history/i).isVisible()
   expect(isEmpty || hasOrders).toBeTruthy()
 })
 
 test('orders page accessible from nav', async ({ page }) => {
   await page.goto('/shop')
-  await page.getByRole('link', { name: /my orders/i }).click()
+  await page.getByRole('button', { name: 'Account menu' }).click()
+  await page.getByRole('menuitem', { name: 'Orders', exact: true }).click()
   await expect(page).toHaveURL(/orders/)
 })
 

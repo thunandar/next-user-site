@@ -9,6 +9,11 @@ const nextConfig: NextConfig = {
         hostname: 'localhost',
         pathname: '/uploads/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'localhost',
+        pathname: '/uploads/**',
+      },
     ],
     unoptimized: process.env.NODE_ENV === 'development',
   },
