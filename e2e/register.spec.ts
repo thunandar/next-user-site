@@ -27,7 +27,7 @@ test('shows error when password is too short', async ({ page }) => {
   await emailInput.fill(`test+${Date.now()}@example.com`)
   await pwInput.fill('short')
   await page.getByRole('button', { name: /create account/i }).click()
-  await expect(page.getByText(/at least 8 characters/i)).toBeVisible({ timeout: 5_000 })
+  await expect(page.getByText(/password must be at least 8/i)).toBeVisible({ timeout: 5_000 })
 })
 
 test('has google sign up button and link back to login', async ({ page }) => {

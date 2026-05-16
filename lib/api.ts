@@ -44,6 +44,15 @@ const buildPaginatedResponse = <T>(
 
 let _accessToken: string | null = null
 
+// Rehydrate the in-memory token from the cookie on first client-side import.
+// Without this, every page load starts with no Authorization header, forcing a
+// refresh round-trip — which also breaks Playwright runs because the backend
+// rotates refresh tokens and only the first test can succeed.
+if (typeof document !== 'undefined') {
+  const found = document.cookie.split('; ').find((c) => c.startsWith('access_token='))
+  if (found) _accessToken = found.slice('access_token='.length)
+}
+
 export const tokenStore = {
   getAccess: () => _accessToken,
   set: (access: string) => {

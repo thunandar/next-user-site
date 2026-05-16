@@ -5,7 +5,7 @@ test.beforeEach(async ({ page }) => {
 })
 
 test('addresses page loads', async ({ page }) => {
-  await expect(page.getByRole('heading', { name: 'Addresses', exact: true })).toBeVisible()
+  await expect(page.locator('.t-h2', { hasText: 'Addresses' })).toBeVisible()
   await expect(page.getByRole('button', { name: /add address/i })).toBeVisible()
 })
 

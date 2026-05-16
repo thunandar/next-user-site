@@ -36,5 +36,5 @@ test('login with valid credentials redirects to shop', async ({ page }) => {
 
 test('register page loads correctly', async ({ page }) => {
   await page.goto('/register')
-  await expect(page.getByText(/create|register|sign up/i)).toBeVisible()
+  await expect(page.getByRole('heading', { name: /create your account/i })).toBeVisible()
 })

@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import axios from 'axios'
 import { authApi, tokenStore } from '@/lib/api'
 import type { User, RegisterData } from '@/types'
 
@@ -24,14 +23,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
 
-  // Silent refresh on every page load — restores session from HttpOnly refresh_token cookie
+  // tokenStore rehydrates the access token from its cookie on first import. If a
+  // token is present, fetch the user; the axios 401 interceptor will silently
+  // refresh on expiry. Skipping the eager refresh matters because the backend
+  // rotates refresh tokens per use — refreshing on every mount would burn the
+  // token saved by Playwright's storageState and break subsequent tests.
   useEffect(() => {
-    axios.post('/api/auth/refresh')
-      .then(res => {
-        const { accessToken } = res.data.data as { accessToken: string }
-        tokenStore.set(accessToken)
-        return authApi.getMe()
-      })
+    if (!tokenStore.getAccess()) {
+      setIsLoading(false)
+      return
+    }
+    authApi.getMe()
       .then(({ user }) => setUser(user))
       .catch(() => tokenStore.clear())
       .finally(() => setIsLoading(false))

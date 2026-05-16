@@ -3,9 +3,9 @@ import { test, expect } from '@playwright/test'
 test('wishlist page loads', async ({ page }) => {
   await page.goto('/shop/wishlist')
   await page.waitForLoadState('networkidle')
-  // Either shows wishlist items or empty state
-  const isEmpty = await page.getByText(/wishlist is empty/i).isVisible()
-  const hasItems = await page.getByText(/my wishlist/i).isVisible()
+  // Either shows wishlist items (SectionHead "Wishlist") or empty state ("Nothing saved yet")
+  const isEmpty = await page.getByText(/nothing saved yet/i).isVisible()
+  const hasItems = await page.getByText('Wishlist', { exact: true }).first().isVisible()
   expect(isEmpty || hasItems).toBeTruthy()
 })
 

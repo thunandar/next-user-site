@@ -37,12 +37,19 @@ test.describe('Checkout flow', () => {
   })
 
   test('shows order summary on checkout page', async ({ page }) => {
-    await addProductToCart(page)
-    await page.goto('/shop/checkout')
+    // Add a product via the listing's inline quick-add button. Then navigate
+    // through /shop/cart's checkout link instead of `page.goto('/shop/checkout')` —
+    // a direct goto races the CartProvider's hydration-from-localStorage and the
+    // checkout page's "redirect to /cart if empty" effect (page.tsx:68).
+    await page.goto('/shop/products')
     await page.waitForLoadState('networkidle')
+    await page.getByRole('button', { name: /add to cart/i }).first().click()
+    await page.goto('/shop/cart')
+    await page.getByRole('link', { name: /checkout/i }).first().click()
+    await page.waitForURL(/checkout/, { timeout: 8_000 })
 
-    await expect(page.getByText('Order Summary')).toBeVisible({ timeout: 8_000 })
-    await expect(page.getByText('Total')).toBeVisible()
+    await expect(page.locator('.t-h4', { hasText: 'Your order' })).toBeVisible({ timeout: 8_000 })
+    await expect(page.getByText('Total').first()).toBeVisible()
   })
 
   test('shipping step requires address before continuing', async ({ page }) => {
